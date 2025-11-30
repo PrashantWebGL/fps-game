@@ -46,6 +46,7 @@ const sky = new THREE.Mesh(skyGeo, skyMat);
 scene.add(sky);
 
 // Trees
+const treePositions = [];
 function createTree(x, z) {
     const tree = new THREE.Group();
 
@@ -67,7 +68,10 @@ function createTree(x, z) {
 
     tree.position.set(x, 0, z);
     scene.add(tree);
+    // Store position for spawn checks
+    treePositions.push(new THREE.Vector3(x, 0, z));
 }
+
 
 // Generate Forest Boundary
 for (let i = 0; i < 50; i++) {
@@ -343,29 +347,34 @@ player.controls.addEventListener('unlock', () => {
 
 // Enemy Spawning
 setInterval(() => {
-    if (player.controls.isLocked && enemies.length < maxEnemies) {
-        // Try to find a valid spawn position not inside a wall
+    if (player.controls.isLocked && enemies.length < maxEnemies) {            // Try to find a valid spawn position not inside a tree and away from player
         let spawnPos;
         let attempts = 0;
-        while (attempts < 10) {
+        const minDistFromPlayer = 5; // meters
+        while (attempts < 20) {
             const angle = Math.random() * Math.PI * 2;
             const radius = 20 + Math.random() * 10;
-            const x = player.position.x + Math.cos(angle) * radius;
-            const z = player.position.z + Math.sin(angle) * radius;
+            const x = player.dummyCamera.position.x + Math.cos(angle) * radius;
+            const z = player.dummyCamera.position.z + Math.sin(angle) * radius;
 
-            // Simple check: ensure not too close to any wall center
-            // A better check would be Box3 intersection
+            // Check distance to player
+            const distToPlayer = Math.hypot(x - player.dummyCamera.position.x, z - player.dummyCamera.position.z);
+            if (distToPlayer < minDistFromPlayer) { attempts++; continue; }
+
+            // Check against trees
+            let tooCloseToTree = false;
+            for (const treePos of treePositions) {
+                const d = Math.hypot(x - treePos.x, z - treePos.z);
+                if (d < 2) { tooCloseToTree = true; break; }
+            }
+            if (tooCloseToTree) { attempts++; continue; }
+
+            // Simple wall check (existing logic)
             let valid = true;
             for (const wall of walls) {
-                if (new THREE.Vector3(x, 0, z).distanceTo(wall.position) < 2) { // Reduced distance check
-                    valid = false;
-                    break;
-                }
+                if (new THREE.Vector3(x, 0, z).distanceTo(wall.position) < 2) { valid = false; break; }
             }
-            if (valid) {
-                spawnPos = new THREE.Vector3(x, 0, z);
-                break;
-            }
+            if (valid) { spawnPos = new THREE.Vector3(x, 0, z); break; }
             attempts++;
         }
 
