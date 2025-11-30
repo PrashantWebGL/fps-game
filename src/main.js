@@ -215,6 +215,33 @@ function showLeaderboard(currentScore) {
     `;
 }
 
+// Mobile detection
+const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+
+// Get references after DOM is ready
+const mobileStartEl = document.getElementById('mobile-start');
+
+// Show mobile start overlay on small screens
+function showMobileStartOverlay() {
+    if (window.innerWidth <= 768) {
+        mobileStartEl.style.display = 'flex';
+    }
+}
+showMobileStartOverlay();
+// Hide the default instructions overlay on mobile so the tap-to-play overlay is visible
+if (isMobile) {
+    instructionsEl.style.display = 'none';
+    instructionsEl.style.visibility = 'hidden';
+    instructionsEl.style.opacity = '0';
+}
+
+// Start the game when the player taps the overlay (mobile)
+mobileStartEl.addEventListener('click', () => {
+    mobileStartEl.style.display = 'none';
+    startGame(currentDifficulty);
+    gameStarted = true;
+});
+
 // Difficulty Selection
 function startGame(difficulty) {
     const nameInput = document.getElementById('player-name');
@@ -229,11 +256,17 @@ function startGame(difficulty) {
     }
     gameStarted = true;
     try {
-        player.controls.lock();
-        console.log('Pointer lock requested');
+        if (!isMobile) {
+            player.controls.lock();
+            console.log('Pointer lock requested');
+        }
     } catch (e) {
         console.error('Pointer lock failed:', e);
     }
+    // Hide the instructions overlay (pause screen)
+    instructionsEl.style.display = 'none';
+    instructionsEl.style.visibility = 'hidden';
+    instructionsEl.style.opacity = '0';
 }
 
 const nameInput = document.getElementById('player-name');
@@ -352,7 +385,7 @@ function animate() {
     const delta = (time - lastTime) / 1000;
     lastTime = time;
 
-    if (player.controls.isLocked) {
+    if (gameStarted && (player.controls.isLocked || isMobile)) {
         player.update(delta, walls); // Pass walls for collision
 
         // Update Potions
