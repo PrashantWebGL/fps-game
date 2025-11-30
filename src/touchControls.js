@@ -5,6 +5,10 @@ export class TouchControls {
         this.shouldShoot = false;
         this.isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
+        // Track specific touch IDs to avoid conflicts
+        this.moveTouchId = null;
+        this.lookTouchId = null;
+
         if (this.isTouchDevice) {
             this.initUI();
             this.initListeners();
@@ -20,51 +24,85 @@ export class TouchControls {
         this.lookZone = document.getElementById('look-zone-right');
         this.shootBtn = document.getElementById('btn-shoot');
 
-        // Center of joystick (calculated on touch start to handle resizing/scrolling)
+        // Center of joystick
         this.joystickCenter = { x: 0, y: 0 };
-        this.maxRadius = 60; // Half of 120px width
+        this.maxRadius = 60;
 
-        this.lastTouchX = 0;
-        this.lastTouchY = 0;
+        this.lastLookX = 0;
+        this.lastLookY = 0;
     }
 
     initListeners() {
-        // Joystick
+        // --- JOYSTICK (Left Side) ---
         this.joystickZone.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            const rect = this.joystickZone.getBoundingClientRect();
-            this.joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-            this.handleJoystick(e.targetTouches[0]);
+            // Only accept if we aren't already tracking a move finger
+            if (this.moveTouchId === null) {
+                const touch = e.changedTouches[0];
+                this.moveTouchId = touch.identifier;
+
+                // Recalculate center based on zone position
+                const rect = this.joystickZone.getBoundingClientRect();
+                this.joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+
+                this.handleJoystick(touch);
+            }
         }, { passive: false });
 
         this.joystickZone.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            this.handleJoystick(e.targetTouches[0]);
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === this.moveTouchId) {
+                    this.handleJoystick(e.changedTouches[i]);
+                    break;
+                }
+            }
         }, { passive: false });
 
         this.joystickZone.addEventListener('touchend', (e) => {
             e.preventDefault();
-            this.resetJoystick();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === this.moveTouchId) {
+                    this.resetJoystick();
+                    this.moveTouchId = null;
+                    break;
+                }
+            }
         }, { passive: false });
 
-        // Look
+        // --- LOOK (Right Side) ---
         this.lookZone.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            this.lastTouchX = e.targetTouches[0].clientX;
-            this.lastTouchY = e.targetTouches[0].clientY;
+            if (this.lookTouchId === null) {
+                const touch = e.changedTouches[0];
+                this.lookTouchId = touch.identifier;
+                this.lastLookX = touch.clientX;
+                this.lastLookY = touch.clientY;
+            }
         }, { passive: false });
 
         this.lookZone.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            this.handleLook(e.targetTouches[0]);
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === this.lookTouchId) {
+                    this.handleLook(e.changedTouches[i]);
+                    break;
+                }
+            }
         }, { passive: false });
 
         this.lookZone.addEventListener('touchend', (e) => {
             e.preventDefault();
-            this.lookVector = { x: 0, y: 0 };
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === this.lookTouchId) {
+                    this.lookTouchId = null;
+                    this.lookVector = { x: 0, y: 0 };
+                    break;
+                }
+            }
         }, { passive: false });
 
-        // Shoot
+        // --- SHOOT BUTTON ---
         this.shootBtn.addEventListener('touchstart', (e) => {
             e.preventDefault();
             this.shouldShoot = true;
@@ -102,21 +140,21 @@ export class TouchControls {
     }
 
     handleLook(touch) {
-        const deltaX = touch.clientX - this.lastTouchX;
-        const deltaY = touch.clientY - this.lastTouchY;
+        const deltaX = touch.clientX - this.lastLookX;
+        const deltaY = touch.clientY - this.lastLookY;
 
-        this.lastTouchX = touch.clientX;
-        this.lastTouchY = touch.clientY;
+        this.lastLookX = touch.clientX;
+        this.lastLookY = touch.clientY;
 
-        // Sensitivity factor
-        const sensitivity = 0.005;
+        // Increased sensitivity for better feel
+        const sensitivity = 0.008;
         this.lookVector.x = deltaX * sensitivity;
         this.lookVector.y = deltaY * sensitivity;
     }
 
     getLookDelta() {
         const delta = { ...this.lookVector };
-        this.lookVector = { x: 0, y: 0 }; // Reset after reading (for delta movement)
+        this.lookVector = { x: 0, y: 0 }; // Reset after reading
         return delta;
     }
 }
