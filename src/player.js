@@ -133,7 +133,7 @@ export class Player {
         // Inverted logic to fix controls
         // Combine with touch input
         const touchMove = this.touchControls.moveVector;
-        this.direction.z = Number(this.moveBackward) - Number(this.moveForward) - touchMove.y;
+        this.direction.z = Number(this.moveBackward) - Number(this.moveForward) + touchMove.y;
         this.direction.x = Number(this.moveLeft) - Number(this.moveRight) + touchMove.x;
         this.direction.normalize();
 

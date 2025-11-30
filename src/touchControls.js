@@ -34,12 +34,12 @@ export class TouchControls {
             e.preventDefault();
             const rect = this.joystickZone.getBoundingClientRect();
             this.joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-            this.handleJoystick(e.touches[0]);
+            this.handleJoystick(e.targetTouches[0]);
         }, { passive: false });
 
         this.joystickZone.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            this.handleJoystick(e.touches[0]);
+            this.handleJoystick(e.targetTouches[0]);
         }, { passive: false });
 
         this.joystickZone.addEventListener('touchend', (e) => {
@@ -50,13 +50,13 @@ export class TouchControls {
         // Look
         this.lookZone.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            this.lastTouchX = e.touches[0].clientX;
-            this.lastTouchY = e.touches[0].clientY;
+            this.lastTouchX = e.targetTouches[0].clientX;
+            this.lastTouchY = e.targetTouches[0].clientY;
         }, { passive: false });
 
         this.lookZone.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            this.handleLook(e.touches[0]);
+            this.handleLook(e.targetTouches[0]);
         }, { passive: false });
 
         this.lookZone.addEventListener('touchend', (e) => {
