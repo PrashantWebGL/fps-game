@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Three.js FPS</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    #ui {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      font-family: 'Courier New', Courier, monospace;
+      color: white;
+    }
+
+    #hud-top-right {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: flex-end;
+      min-width: 280px;
+    }
+
+    .hud-container {
+      background: linear-gradient(135deg, rgba(0, 0, 0, 0.85), rgba(15, 15, 15, 0.75));
+      border: 2px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 15px 20px;
+      backdrop-filter: blur(15px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .hud-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .hud-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .hud-row:first-child {
+      padding-top: 0;
+    }
+
+    .hud-icon {
+      font-size: 20px;
+      margin-right: 10px;
+      filter: drop-shadow(0 0 5px currentColor);
+    }
+
+    .hud-label {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.5);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+    }
+
+    .hud-value {
+      font-size: 28px;
+      font-weight: bold;
+      letter-spacing: -1px;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+      font-family: 'Courier New', monospace;
+    }
+
+    #health-value {
+      color: #ff4444;
+      text-shadow: 0 0 15px rgba(255, 68, 68, 0.6), 0 2px 8px rgba(0, 0, 0, 0.8);
+    }
+
+    #health-bar {
+      width: 100%;
+      height: 6px;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 3px;
+      margin-top: 8px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 68, 68, 0.2);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+
+    #health-fill {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #ff1744, #ff4444, #ff6b6b);
+      transition: width 0.3s ease;
+      box-shadow: 0 0 10px rgba(255, 68, 68, 0.8);
+      border-radius: 2px;
+    }
+
+    #score-value {
+      color: #ffd700;
+      text-shadow: 0 0 15px rgba(255, 215, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.8);
+    }
+
+    #ammo-value {
+      color: #00ff88;
+      text-shadow: 0 0 15px rgba(0, 255, 136, 0.6), 0 2px 8px rgba(0, 0, 0, 0.8);
+    }
+
+    .stat-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 20px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    #crosshair::before,
+    #crosshair::after {
+      content: '';
+      position: absolute;
+      background: #00ff00;
+      box-shadow: 0 0 8px rgba(0, 255, 0, 0.9), 0 0 3px rgba(0, 255, 0, 0.5);
+    }
+
+    #crosshair::before {
+      top: 9px;
+      left: 0;
+      width: 20px;
+      height: 2px;
+    }
+
+    #crosshair::after {
+      top: 0;
+      left: 9px;
+      width: 2px;
+      height: 20px;
+    }
+
+    #instructions {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      background: rgba(0, 0, 0, 0.9);
+      padding: 40px;
+      border-radius: 20px;
+      pointer-events: auto;
+      border: 3px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+      backdrop-filter: blur(10px);
+      color: white;
+      z-index: 1000;
+    }
+
+    #instructions h1 {
+      color: white;
+      margin: 0;
+    }
+
+    #instructions p {
+      color: white;
+    }
+
+    #instructions table {
+      color: white;
+    }
+
+    #instructions th,
+    #instructions td {
+      color: white;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="ui">
+    <div id="hud-top-right">
+      <div class="hud-container">
+        <!-- Health -->
+        <div class="hud-row">
+          <div class="stat-left">
+            <span class="hud-icon" style="color: #ff4444;">❤</span>
+            <span class="hud-label">Health</span>
+          </div>
+          <div id="health-value" class="hud-value">100</div>
+        </div>
+        <div id="health-bar">
+          <div id="health-fill"></div>
+        </div>
+
+        <!-- Score -->
+        <div class="hud-row" style="margin-top: 12px;">
+          <div class="stat-left">
+            <span class="hud-icon" style="color: #ffd700;">★</span>
+            <span class="hud-label">Score</span>
+          </div>
+          <div id="score-value" class="hud-value">0</div>
+        </div>
+
+        <!-- Ammo -->
+        <div class="hud-row">
+          <div class="stat-left">
+            <span class="hud-icon" style="color: #00ff88;">⚡</span>
+            <span class="hud-label">Ammo</span>
+          </div>
+          <div id="ammo-value" class="hud-value">∞</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="crosshair"></div>
+
+  <!-- Touch Controls (Hidden by default) -->
+  <div id="touch-controls"
+    style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999;">
+    <!-- Left Joystick (Movement) -->
+    <div id="joystick-zone-left"
+      style="position: absolute; bottom: 50px; left: 50px; width: 120px; height: 120px; background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 50%; pointer-events: auto; touch-action: none;">
+      <div id="joystick-knob-left"
+        style="position: absolute; top: 50%; left: 50%; width: 50px; height: 50px; background: rgba(255, 255, 255, 0.5); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none;">
+      </div>
+    </div>
+
+    <!-- Right Zone (Look) - Invisible overlay on right half -->
+    <div id="look-zone-right"
+      style="position: absolute; top: 0; right: 0; width: 50%; height: 100%; pointer-events: auto; touch-action: none;">
+    </div>
+
+    <!-- Shoot Button -->
+    <button id="btn-shoot"
+      style="position: absolute; bottom: 80px; right: 40px; width: 80px; height: 80px; background: rgba(255, 50, 50, 0.6); border: 3px solid rgba(255, 255, 255, 0.4); border-radius: 50%; font-size: 30px; color: white; pointer-events: auto; display: flex; justify-content: center; align-items: center; touch-action: none; user-select: none;">🔫</button>
+  </div>
+  <div id="instructions">
+    <h1 style="color: white; margin: 0 0 20px 0; font-size: 32px;">SELECT DIFFICULTY</h1>
+
+    <div style="margin: 20px 0;">
+      <input type="text" id="player-name" placeholder="Enter your name" maxlength="20" style="padding: 12px 20px; font-size: 18px; border: 2px solid rgba(255, 255, 255, 0.3); 
+               border-radius: 8px; background: rgba(255, 255, 255, 0.1); color: white; 
+               text-align: center; width: 250px; font-family: 'Courier New', monospace;
+               backdrop-filter: blur(5px);" />
+    </div>
+
+    <div style="display: flex; gap: 15px; justify-content: center; margin-top: 20px;">
+      <button id="btn-easy"
+        style="padding: 15px 30px; font-size: 18px; font-weight: bold; cursor: pointer; background: #00ff00; color: black; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 255, 0, 0.3); transition: all 0.2s;">EASY</button>
+      <button id="btn-medium"
+        style="padding: 15px 30px; font-size: 18px; font-weight: bold; cursor: pointer; background: #ffaa00; color: black; border: none; border-radius: 8px; box-shadow: 0 44px 10px rgba(255, 170, 0, 0.3); transition: all 0.2s;">MEDIUM</button>
+      <button id="btn-hard"
+        style="padding: 15px 30px; font-size: 18px; font-weight: bold; cursor: pointer; background: #ff0000; color: white; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(255, 0, 0, 0.3); transition: all 0.2s;">HARD</button>
+    </div>
+    <p style="margin-top: 25px; font-size: 16px; color: rgba(255, 255, 255, 0.9);">WASD to Move | Click to Shoot | Press
+      3 for 3rd Person</p>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>
