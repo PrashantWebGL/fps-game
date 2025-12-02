@@ -252,10 +252,10 @@ export class Player {
             // If it goes Right, then Right vector is Left? Or we need to invert.
 
             // Let's FLIP the sign.
-            // Previous: +moveX
-            // New: -moveX
+            // Previous: -moveX
+            // New: +moveX
 
-            this.velocity.add(right.clone().multiplyScalar(-moveX * moveSpeed));
+            this.velocity.add(right.clone().multiplyScalar(moveX * moveSpeed));
         }
 
         // Apply Velocity & Collision (Separate Axes)
