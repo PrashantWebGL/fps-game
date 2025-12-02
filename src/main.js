@@ -6,6 +6,8 @@ import { Particles } from './particles.js';
 import { GameMap } from './map.js';
 import { SoundManager } from './audio.js';
 import { HealthPotion } from './healthPotion.js';
+import { VercelAnalytics } from '@vercel/analytics/react';
+
 
 // Scene Setup
 const scene = new THREE.Scene();
