@@ -6,7 +6,7 @@ import { Particles } from './particles.js';
 import { GameMap } from './map.js';
 import { SoundManager } from './audio.js';
 import { HealthPotion } from './healthPotion.js';
-import { VercelAnalytics } from '@vercel/analytics/react';
+import { inject } from '@vercel/analytics';
 
 
 // Scene Setup
@@ -529,5 +529,8 @@ function animate() {
 
     renderer.render(scene, camera);
 }
+
+// Initialize Vercel Analytics
+inject();
 
 animate();
