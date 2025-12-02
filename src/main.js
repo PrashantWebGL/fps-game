@@ -347,7 +347,7 @@ player.controls.addEventListener('unlock', () => {
 
 // Enemy Spawning
 setInterval(() => {
-    if (player.controls.isLocked && enemies.length < maxEnemies) {            // Try to find a valid spawn position not inside a tree and away from player
+    if ((player.controls.isLocked || isMobile) && enemies.length < maxEnemies) {            // Try to find a valid spawn position not inside a tree and away from player
         let spawnPos;
         let attempts = 0;
         const minDistFromPlayer = 5; // meters

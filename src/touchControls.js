@@ -114,6 +114,22 @@ export class TouchControls {
             this.shouldShoot = false;
             this.shootBtn.style.transform = 'scale(1)';
         }, { passive: false });
+
+        // --- JUMP BUTTON ---
+        this.jumpBtn = document.getElementById('btn-jump');
+        if (this.jumpBtn) {
+            this.jumpBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                this.shouldJump = true;
+                this.jumpBtn.style.transform = 'scale(0.9)';
+            }, { passive: false });
+
+            this.jumpBtn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                this.shouldJump = false;
+                this.jumpBtn.style.transform = 'scale(1)';
+            }, { passive: false });
+        }
     }
 
     handleJoystick(touch) {

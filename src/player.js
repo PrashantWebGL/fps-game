@@ -130,27 +130,46 @@ export class Player {
         this.velocity.z -= this.velocity.z * 10.0 * delta;
         this.velocity.y -= 9.8 * 3.0 * delta; // Gravity
 
+        // Jump
+        if (this.touchControls.shouldJump && this.isOnGround) {
+            this.velocity.y = this.jumpVelocity;
+            this.isOnGround = false;
+            this.touchControls.shouldJump = false; // Reset jump flag
+        }
+
         // Calculate Movement Direction in World Space
         const touchMove = this.touchControls.moveVector;
 
         // Keyboard input
+        // Inverted logic: W (Forward) should be positive Z for our calculation if we subtract it later?
+        // Let's stick to standard: W = Forward.
+        // User said W moves Back.
+        // Previous: moveZ = Back - Forward. (W -> -1).
+        // Velocity += Forward * (-moveZ) -> Forward * 1.
+        // If that moved Back, then Forward vector is Back?
+        // Let's just invert the final application.
+
         let moveZ = Number(this.moveBackward) - Number(this.moveForward);
         let moveX = Number(this.moveLeft) - Number(this.moveRight);
 
-        // Combine with joystick (joystick y is -1 for up, 1 for down usually, but we inverted it in touchControls or here?)
-        // In touchControls: up is negative Y (screen coords), down is positive.
-        // In 3D space: forward is negative Z, backward is positive Z.
-        // So joystick Y (up/neg) should map to forward (neg Z).
-        // Let's check touchControls again. 
-        // Wait, in previous step we did: + touchMove.y. 
-        // If joystick up is negative Y, then + (-val) = -val (forward). Correct.
+        // Joystick Input
+        // User said Up moves Back. Up is usually -1 Y.
+        // Previous: moveZ += touchMove.y (-1).
+        // So Up -> -1 -> Same as W.
+        // If W moves Back, Up moves Back. Consistent.
 
-        // But we need to ensure we are actually moving.
+        // User said Left moves Right.
+        // Left is -1 X.
+        // Previous: moveX += touchMove.x (-1).
+        // Velocity += Right * moveX -> Right * -1 -> Left.
+        // User said it moves Right.
+        // So Right vector might be Left? Or my logic is inverted.
 
-        // Apply joystick input if it exists
+        // FIX: Invert the inputs to match the desired outcome.
+
         if (touchMove.x !== 0 || touchMove.y !== 0) {
-            moveZ += touchMove.y; // Up is negative -> Forward negative
-            moveX += touchMove.x; // Right is positive -> Right positive
+            moveZ += touchMove.y;
+            moveX += touchMove.x;
         }
 
         // Normalize direction vector if moving
@@ -211,11 +230,32 @@ export class Player {
             // If moveZ is positive (backward), we subtract forward vector? No, forward vector points forward.
             // We want to move along the forward vector by -moveZ amount?
             // If moveZ is -1 (forward), -(-1) = +1 * forward. Correct.
-            this.velocity.add(forward.clone().multiplyScalar(-moveZ * moveSpeed));
+            // Fix Reversed Controls:
+            // If W (moveZ = -1) moves Back, we need to invert the Z application.
+            // Previous: -moveZ. (W -> 1).
+            // New: +moveZ. (W -> -1).
+            // If Forward vector is truly Forward, then adding Forward * -1 should move Back.
+            // Wait, if W moves Back, it means we are moving in +Z direction (assuming camera looks -Z).
+            // So we want to move in -Z.
 
-            // Left/Right
-            // If moveX is positive (right), we add right vector.
-            this.velocity.add(right.clone().multiplyScalar(moveX * moveSpeed));
+            // Let's just FLIP the sign.
+            // Previous: -moveZ
+            // New: +moveZ
+
+            this.velocity.add(forward.clone().multiplyScalar(moveZ * moveSpeed));
+
+            // Fix Reversed Left/Right:
+            // User said Left moves Right.
+            // Left (moveX = -1).
+            // Previous: +moveX. (Left -> -1).
+            // If Right vector is Right, adding Right * -1 should go Left.
+            // If it goes Right, then Right vector is Left? Or we need to invert.
+
+            // Let's FLIP the sign.
+            // Previous: +moveX
+            // New: -moveX
+
+            this.velocity.add(right.clone().multiplyScalar(-moveX * moveSpeed));
         }
 
         // Apply Velocity & Collision (Separate Axes)
