@@ -131,17 +131,39 @@ export class Player {
         this.velocity.y -= 9.8 * 3.0 * delta; // Gravity
 
         // Calculate Movement Direction in World Space
-        // Inverted logic to fix controls
-        // Combine with touch input
         const touchMove = this.touchControls.moveVector;
-        this.direction.z = Number(this.moveBackward) - Number(this.moveForward) + touchMove.y;
-        this.direction.x = Number(this.moveLeft) - Number(this.moveRight) + touchMove.x;
-        this.direction.normalize();
+
+        // Keyboard input
+        let moveZ = Number(this.moveBackward) - Number(this.moveForward);
+        let moveX = Number(this.moveLeft) - Number(this.moveRight);
+
+        // Combine with joystick (joystick y is -1 for up, 1 for down usually, but we inverted it in touchControls or here?)
+        // In touchControls: up is negative Y (screen coords), down is positive.
+        // In 3D space: forward is negative Z, backward is positive Z.
+        // So joystick Y (up/neg) should map to forward (neg Z).
+        // Let's check touchControls again. 
+        // Wait, in previous step we did: + touchMove.y. 
+        // If joystick up is negative Y, then + (-val) = -val (forward). Correct.
+
+        // But we need to ensure we are actually moving.
+
+        // Apply joystick input if it exists
+        if (touchMove.x !== 0 || touchMove.y !== 0) {
+            moveZ += touchMove.y; // Up is negative -> Forward negative
+            moveX += touchMove.x; // Right is positive -> Right positive
+        }
+
+        // Normalize direction vector if moving
+        this.direction.set(moveX, 0, moveZ);
+        if (this.direction.lengthSq() > 0) {
+            this.direction.normalize();
+        }
 
         // Apply Touch Look
         const lookDelta = this.touchControls.getLookDelta();
         if (lookDelta.x !== 0 || lookDelta.y !== 0) {
             // Apply pitch to dummyCamera so it matches PC behavior (PointerLockControls)
+            this.dummyCamera.rotation.y -= lookDelta.x;
             this.dummyCamera.rotation.x -= lookDelta.y;
             this.dummyCamera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.dummyCamera.rotation.x));
         }
@@ -156,11 +178,44 @@ export class Player {
         right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
 
         // Apply Input to Velocity
-        if (this.moveForward || this.moveBackward) {
-            this.velocity.add(forward.multiplyScalar(this.direction.z * 100.0 * delta));
-        }
-        if (this.moveLeft || this.moveRight) {
-            this.velocity.add(right.multiplyScalar(this.direction.x * 100.0 * delta));
+        // We need to use the magnitude of input for speed control (analog stick)
+        // But for now, just binary "is moving" check or use the combined vector length?
+
+        // Let's just use the direction vector we calculated.
+        // If moveZ or moveX are non-zero, we apply velocity.
+
+        if (moveZ !== 0 || moveX !== 0) {
+            // We need to project the local move direction (moveX, moveZ) into world space
+            // forward * moveZ + right * moveX
+            // Note: moveZ is + for backward, - for forward. 
+            // forward vector points to -Z (local). 
+            // So if we want to move forward (moveZ = -1), we want positive forward vector.
+            // forward.multiplyScalar(-moveZ) ? 
+
+            // Let's stick to the standard:
+            // forward is the direction we are looking.
+            // if we press W (moveForward), moveZ is -1. We want to move along forward.
+            // So we should add forward * 1. 
+            // Wait, standard logic:
+            // velocity += forward * (moveForward ? 1 : 0)
+
+            // Let's use the calculated local direction 'this.direction' which is (x, 0, z)
+            // z is forward/back, x is left/right
+
+            // Actually, let's simplify.
+            // Forward movement:
+            const moveSpeed = this.speed * 10.0 * delta;
+
+            // Forward/Back
+            // If moveZ is negative (forward), we add forward vector.
+            // If moveZ is positive (backward), we subtract forward vector? No, forward vector points forward.
+            // We want to move along the forward vector by -moveZ amount?
+            // If moveZ is -1 (forward), -(-1) = +1 * forward. Correct.
+            this.velocity.add(forward.clone().multiplyScalar(-moveZ * moveSpeed));
+
+            // Left/Right
+            // If moveX is positive (right), we add right vector.
+            this.velocity.add(right.clone().multiplyScalar(moveX * moveSpeed));
         }
 
         // Apply Velocity & Collision (Separate Axes)
