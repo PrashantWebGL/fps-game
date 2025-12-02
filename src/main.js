@@ -231,20 +231,11 @@ function showMobileStartOverlay() {
         mobileStartEl.style.display = 'flex';
     }
 }
-showMobileStartOverlay();
-// Hide the default instructions overlay on mobile so the tap-to-play overlay is visible
-if (isMobile) {
-    instructionsEl.style.display = 'none';
-    instructionsEl.style.visibility = 'hidden';
-    instructionsEl.style.opacity = '0';
-}
+// Don't auto-show mobile overlay - let users see difficulty selection
+// showMobileStartOverlay();
 
-// Start the game when the player taps the overlay (mobile)
-mobileStartEl.addEventListener('click', () => {
-    mobileStartEl.style.display = 'none';
-    startGame(currentDifficulty);
-    gameStarted = true;
-});
+// Mobile users will use the same difficulty selection as desktop
+// No need for separate "tap to play" overlay
 
 // Difficulty Selection
 function startGame(difficulty) {

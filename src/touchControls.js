@@ -146,7 +146,8 @@ export class TouchControls {
         this.joystickKnob.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
 
         // Normalize output -1 to 1
-        this.moveVector.x = knobX / this.maxRadius;
+        // Invert X axis to match keyboard controls (left = negative, right = positive)
+        this.moveVector.x = -(knobX / this.maxRadius);
         this.moveVector.y = knobY / this.maxRadius;
     }
 

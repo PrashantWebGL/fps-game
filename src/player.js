@@ -131,9 +131,9 @@ export class Player {
         this.velocity.y -= 9.8 * 3.0 * delta; // Gravity
 
         // Jump
-        if (this.touchControls.shouldJump && this.isOnGround) {
+        if (this.touchControls.shouldJump && this.canJump) {
             this.velocity.y = this.jumpVelocity;
-            this.isOnGround = false;
+            this.canJump = false;
             this.touchControls.shouldJump = false; // Reset jump flag
         }
 
