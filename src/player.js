@@ -31,6 +31,7 @@ export class Player {
         // Dummy Camera (for 3rd Person)
         this.dummyCamera = new THREE.Object3D();
         this.dummyCamera.position.set(0, 2, 0);
+        this.dummyCamera.rotation.order = 'YXZ'; // Important for FPS controls
         this.scene.add(this.dummyCamera);
 
         // 3rd Person Toggle
@@ -140,13 +141,9 @@ export class Player {
         // Apply Touch Look
         const lookDelta = this.touchControls.getLookDelta();
         if (lookDelta.x !== 0 || lookDelta.y !== 0) {
-            this.dummyCamera.rotation.y -= lookDelta.x;
-            // For pitch, we need to rotate the camera itself if possible, or clamp it.
-            // PointerLockControls rotates the object (dummyCamera) for yaw.
-            // It usually handles pitch on the object too? No, usually pitch is on the camera (child).
-            // Let's rotate the camera (child) for pitch.
-            this.camera.rotation.x -= lookDelta.y;
-            this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
+            // Apply pitch to dummyCamera so it matches PC behavior (PointerLockControls)
+            this.dummyCamera.rotation.x -= lookDelta.y;
+            this.dummyCamera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.dummyCamera.rotation.x));
         }
 
         // Get Camera Direction (XZ plane only)

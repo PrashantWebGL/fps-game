@@ -397,6 +397,11 @@ function animate() {
     if (gameStarted && (player.controls.isLocked || isMobile)) {
         player.update(delta, walls); // Pass walls for collision
 
+        // Check for touch shooting
+        if (player.touchControls.shouldShoot) {
+            player.shoot(bullets);
+        }
+
         // Update Potions
         for (let i = potions.length - 1; i >= 0; i--) {
             const potion = potions[i];
