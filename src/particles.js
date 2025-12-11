@@ -8,11 +8,14 @@ export class Particles {
 
     createBlood(position, direction) {
         const particleCount = 10;
-        const geometry = new THREE.BoxGeometry(0.05, 0.05, 0.05);
-        const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        // Create geometry and material once if not already created
+        if (!this.particleGeometry) {
+            this.particleGeometry = new THREE.BoxGeometry(0.05, 0.05, 0.05);
+            this.particleMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        }
 
         for (let i = 0; i < particleCount; i++) {
-            const mesh = new THREE.Mesh(geometry, material);
+            const mesh = new THREE.Mesh(this.particleGeometry, this.particleMaterial);
             mesh.position.copy(position);
 
             // Random spread

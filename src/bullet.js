@@ -8,10 +8,53 @@ export class Bullet {
         this.isDead = false;
         this.life = 2.0; // 2 seconds life
 
-        const geometry = new THREE.SphereGeometry(0.1, 8, 8);
-        const material = new THREE.MeshBasicMaterial({ color: owner === 'player' ? 0xffff00 : 0xff0000 });
-        this.mesh = new THREE.Mesh(geometry, material);
+        // Create realistic bullet shape (cylinder + cone)
+        const bulletGroup = new THREE.Group();
+
+        // Bullet casing (cylinder) - brass/brown color
+        const casingGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.15, 8);
+        const casingMaterial = new THREE.MeshStandardMaterial({
+            color: owner === 'player' ? 0xB87333 : 0x8B4513, // Copper/brass for player, darker brown for enemy
+            metalness: 0.7,
+            roughness: 0.3,
+            emissive: owner === 'player' ? 0x3d2817 : 0x2d1810,
+            emissiveIntensity: 0.2
+        });
+        const casing = new THREE.Mesh(casingGeometry, casingMaterial);
+        casing.rotation.x = Math.PI / 2; // Rotate to point forward
+        bulletGroup.add(casing);
+
+        // Bullet tip (cone) - darker metallic
+        const tipGeometry = new THREE.ConeGeometry(0.05, 0.1, 8);
+        const tipMaterial = new THREE.MeshStandardMaterial({
+            color: owner === 'player' ? 0x6B4423 : 0x4A2F1A, // Dark brown/bronze
+            metalness: 0.8,
+            roughness: 0.2,
+            emissive: owner === 'player' ? 0x2d1810 : 0x1d0f08,
+            emissiveIntensity: 0.15
+        });
+        const tip = new THREE.Mesh(tipGeometry, tipMaterial);
+        tip.rotation.x = Math.PI / 2; // Point forward
+        tip.position.z = 0.125; // Position at front of casing
+        bulletGroup.add(tip);
+
+        // Add subtle glow trail for visibility
+        const glowGeometry = new THREE.SphereGeometry(0.08, 8, 8);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: owner === 'player' ? 0xFFAA33 : 0xFF4444,
+            transparent: true,
+            opacity: 0.3
+        });
+        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        bulletGroup.add(glow);
+
+        this.mesh = bulletGroup;
         this.mesh.position.copy(position);
+
+        // Orient bullet in direction of travel
+        const quaternion = new THREE.Quaternion();
+        quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction.clone().normalize());
+        this.mesh.quaternion.copy(quaternion);
 
         // Store previous position for raycasting
         this.previousPosition = position.clone();

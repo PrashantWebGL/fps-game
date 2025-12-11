@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { Player } from './player.js';
 import { Enemy } from './enemy.js';
+import { BossEnemy } from './BossEnemy.js';
 import { Bullet } from './bullet.js';
 import { Particles } from './particles.js';
 import { GameMap } from './map.js';
 import { SoundManager } from './audio.js';
 import { HealthPotion } from './healthPotion.js';
+import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { inject } from '@vercel/analytics';
 
 
@@ -106,6 +108,9 @@ let killCount = 0;
 let maxEnemies = 1;
 let gameStarted = false;
 const potions = [];
+let bossSpawned = false; // Track if boss is currently active
+let totalKills = 0; // Track total kills for boss spawn
+let killsSinceBoss = 0; // Track kills since last boss spawn
 
 const scoreEl = document.getElementById('score-value');
 const instructionsEl = document.getElementById('instructions');
@@ -120,28 +125,70 @@ window.addEventListener('resize', () => {
 // Leaderboard System
 let playerName = '';
 let currentDifficulty = 'easy';
+let localScore = 0; // Store last score for display
 
-function getLeaderboard() {
-    const data = localStorage.getItem('fpsLeaderboard');
-    return data ? JSON.parse(data) : [];
+async function getLeaderboard() {
+    if (!isSupabaseConfigured()) {
+        const data = localStorage.getItem('fpsLeaderboard');
+        return data ? JSON.parse(data) : [];
+    }
+
+    const { data, error } = await supabase
+        .from('leaderboard')
+        .select('*')
+        .order('score', { ascending: false })
+        .limit(10);
+
+    if (error) {
+        console.error('Error fetching leaderboard:', error);
+        // Show silent error in console, but return empty
+        return [];
+    }
+    return data;
 }
 
-function saveScore(name, score, difficulty) {
-    const leaderboard = getLeaderboard();
-    leaderboard.push({
-        name: name || 'Anonymous',
-        score,
-        difficulty: difficulty || 'easy',
-        date: new Date().toISOString()
-    });
-    leaderboard.sort((a, b) => b.score - a.score);
-    const top10 = leaderboard.slice(0, 10);
-    localStorage.setItem('fpsLeaderboard', JSON.stringify(top10));
-    return top10;
+async function saveScore(name, score, difficulty) {
+    if (!isSupabaseConfigured()) {
+        const leaderboard = await getLeaderboard();
+        leaderboard.push({
+            name: name || 'Anonymous',
+            score,
+            difficulty: difficulty || 'easy',
+            date: new Date().toISOString()
+        });
+        leaderboard.sort((a, b) => b.score - a.score);
+        const top10 = leaderboard.slice(0, 10);
+        localStorage.setItem('fpsLeaderboard', JSON.stringify(top10));
+        return top10;
+    }
+
+    const { error } = await supabase
+        .from('leaderboard')
+        .insert([
+            {
+                name: name || 'Anonymous',
+                score: score,
+                difficulty: difficulty || 'easy'
+            }
+        ]);
+
+    if (error) {
+        console.error('Error saving score:', error);
+        alert(`Supabase Error: ${error.message}\n\nHint: Check your Table RLS Polices! Did you disable RLS or add a policy for Anon Key?`);
+    }
+
+    return await getLeaderboard();
 }
 
-function showLeaderboard(currentScore) {
-    const leaderboard = saveScore(playerName, currentScore, currentDifficulty);
+async function showLeaderboard(currentScore) {
+    // If not configued, show local warning
+    let warningHTML = '';
+    if (!isSupabaseConfigured()) {
+        warningHTML = '<div style="color: yellow; text-align: center; margin-bottom: 10px; font-size: 14px;">⚠️ Global Leaderboard Not Configured (Using Local)</div>';
+    }
+
+    // Save and fetch global
+    const leaderboard = await saveScore(playerName, currentScore, currentDifficulty);
 
     let tableRows = '';
 
@@ -155,7 +202,11 @@ function showLeaderboard(currentScore) {
         `;
     } else {
         leaderboard.forEach((entry, index) => {
+            // Highlighting current player globally is tricky without Auth ID.
+            // We can match by name and score, but it might highlight duplicates.
             const isCurrentPlayer = entry.name === playerName && entry.score === currentScore;
+            // Or just check if index matches the one we just inserted? No, we re-fetched.
+
             const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
             const rank = medal || (index + 1);
             const difficultyBadge = entry.difficulty === 'hard' ? '🔴' : entry.difficulty === 'medium' ? '🟡' : '🟢';
@@ -185,7 +236,7 @@ function showLeaderboard(currentScore) {
             <h1 style="color: #ffd700; font-size: 36px; text-align: center; margin: 0 0 10px 0;">
                 🏆 LEADERBOARD 🏆
             </h1>
-            
+            ${warningHTML}
             <p style="color: white; font-size: 18px; text-align: center; margin: 5px 0 15px 0;">
                 Your Score: <span style="color: #ffd700; font-size: 26px; font-weight: bold;">${currentScore}</span>
             </p>
@@ -294,17 +345,19 @@ btnMedium.addEventListener('click', () => { if (playerName.length > 3) startGame
 btnHard.addEventListener('click', () => { if (playerName.length > 3) startGame('hard'); });
 
 // Handle player death
-window.addEventListener('playerDied', (event) => {
+window.addEventListener('playerDied', async (event) => {
     console.log('Player died event triggered, score:', score);
     player.setFinalScore(score);
     const instructions = document.getElementById('instructions');
-    const leaderboardHTML = showLeaderboard(score);
-    console.log('Leaderboard HTML generated, length:', leaderboardHTML.length);
-    instructions.innerHTML = leaderboardHTML;
+    // Show loading text while fetching async leaderboard
+    instructions.innerHTML = '<h1 style="color:white; text-align:center; margin-top: 200px;">LOADING SCORES...</h1>';
     instructions.style.display = 'block';
     instructions.style.visibility = 'visible';
     instructions.style.opacity = '1';
-    console.log('Instructions element updated and shown');
+
+    const leaderboardHTML = await showLeaderboard(score);
+    console.log('Leaderboard HTML generated, length:', leaderboardHTML.length);
+    instructions.innerHTML = leaderboardHTML;
 });
 
 document.addEventListener('click', () => {
@@ -338,8 +391,115 @@ player.controls.addEventListener('unlock', () => {
     }
 });
 
+// Message Display System
+function showMessage(text, duration = 2000, color = '#FFD700') {
+    const messageEl = document.createElement('div');
+    messageEl.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 48px;
+        font-weight: bold;
+        color: ${color};
+        text-shadow: 0 0 20px ${color}, 0 0 40px ${color}, 0 4px 8px rgba(0,0,0,0.8);
+        z-index: 9999;
+        pointer-events: none;
+        font-family: 'Courier New', monospace;
+        animation: messagePopIn 0.3s ease-out;
+        text-align: center;
+        padding: 20px;
+        background: rgba(0,0,0,0.7);
+        border-radius: 15px;
+        border: 3px solid ${color};
+    `;
+    messageEl.textContent = text;
+    document.body.appendChild(messageEl);
+
+    // Add animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes messagePopIn {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.1); }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
+
+    setTimeout(() => {
+        messageEl.style.transition = 'opacity 0.5s';
+        messageEl.style.opacity = '0';
+        setTimeout(() => {
+            document.body.removeChild(messageEl);
+            document.head.removeChild(style);
+        }, 500);
+    }, duration);
+}
+
+// Boss Spawn Function
+function spawnBoss() {
+    bossSpawned = true;
+
+    // Play boss spawn sound
+    soundManager.playBossSpawn();
+    soundManager.playBossAmbient();
+
+    // Show dramatic announcement
+    showMessage('⚠️ BIG BOSS INCOMING! ⚠️', 3000, '#FF0000');
+
+    console.log('🔥 SPAWNING BIG BOSS at 15 kills!');
+
+    // Find spawn position away from player
+    let spawnPos;
+    let attempts = 0;
+    const minDistFromPlayer = 25; // Spawn far away for dramatic entrance
+
+    while (attempts < 30) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 25 + Math.random() * 15;
+        const x = player.dummyCamera.position.x + Math.cos(angle) * radius;
+        const z = player.dummyCamera.position.z + Math.sin(angle) * radius;
+
+        // Check distance to player
+        const distToPlayer = Math.hypot(x - player.dummyCamera.position.x, z - player.dummyCamera.position.z);
+        if (distToPlayer < minDistFromPlayer) { attempts++; continue; }
+
+        // Check against trees
+        let tooCloseToTree = false;
+        for (const treePos of treePositions) {
+            const d = Math.hypot(x - treePos.x, z - treePos.z);
+            if (d < 3) { tooCloseToTree = true; break; }
+        }
+        if (tooCloseToTree) { attempts++; continue; }
+
+        // Check walls
+        let valid = true;
+        for (const wall of walls) {
+            if (new THREE.Vector3(x, 0, z).distanceTo(wall.position) < 3) { valid = false; break; }
+        }
+        if (valid) { spawnPos = new THREE.Vector3(x, 0, z); break; }
+        attempts++;
+    }
+
+    if (spawnPos) {
+        const boss = new BossEnemy(scene, player.position, soundManager);
+        boss.mesh.position.set(spawnPos.x, 0, spawnPos.z);
+        enemies.push(boss);
+        console.log('💀 BIG BOSS SPAWNED at position:', spawnPos);
+    } else {
+        console.warn('Failed to find valid boss spawn position');
+        // Spawn anyway at a default position
+        const boss = new BossEnemy(scene, player.position, soundManager);
+        enemies.push(boss);
+    }
+}
+
 // Enemy Spawning
 setInterval(() => {
+    // Don't spawn normal enemies if boss is currently active
+    if (bossSpawned) return;
+
     if ((player.controls.isLocked || isMobile) && enemies.length < maxEnemies) {            // Try to find a valid spawn position not inside a tree and away from player
         let spawnPos;
         let attempts = 0;
@@ -404,6 +564,7 @@ function animate() {
             if (potion.checkCollision(player.dummyCamera.position)) {
                 const healAmount = potion.collect();
                 player.heal(healAmount);
+                soundManager.playPotionCollect();
                 potion.remove();
                 potions.splice(i, 1);
             }
@@ -482,21 +643,63 @@ function animate() {
                     bullets.splice(i, 1);
                 } else if (closestHit.type === 'enemy') {
                     const enemy = closestHit.enemy;
-                    enemy.takeDamage(50, bullet.velocity, closestHit.partName); // Base damage 50
+
+                    // Calculate damage before applying it
+                    let multiplier = 1.0;
+                    const partName = closestHit.partName;
+                    if (partName === 'head') multiplier = 2.0;
+                    else if (partName === 'torso' || partName === 'body') multiplier = 1.0;
+                    else multiplier = 0.68;
+                    const finalDamage = 50 * multiplier;
+
+                    // Check if this hit will kill the enemy (BEFORE takeDamage is called)
+                    const willDie = (enemy.health - finalDamage <= 0) && !enemy.isBroken;
+                    const isBoss = enemy.isBoss;
+                    const deathPosition = enemy.mesh.position.clone();
+
+                    // Now apply damage
+                    enemy.takeDamage(50, bullet.velocity, partName);
                     particles.createBlood(bullet.position, bullet.velocity);
                     bullet.remove();
                     bullets.splice(i, 1);
 
-                    // Check if actually dead (removed)
-                    if (enemy.isDead) {
-                        const deathPosition = enemy.mesh.position.clone();
-                        enemy.remove();
-                        enemies.splice(closestHit.enemyIndex, 1);
-                        score += 100;
+                    // If enemy just died, track the kill
+                    if (willDie) {
+                        console.log(`Enemy killed! isBoss: ${isBoss}`);
+
+                        // Award points based on enemy type
+                        if (isBoss) {
+                            score += 500; // Boss reward
+                            soundManager.playBossDown();
+                            soundManager.stopBossAmbient();
+                            console.log('🎉 BIG BOSS DOWN! +500 points');
+                            showMessage('💀 BIG BOSS DOWN! +500 💀', 3000, '#FF0000');
+                        } else {
+                            score += 100; // Normal enemy
+                        }
                         scoreEl.innerText = score;
 
-                        // Increment kill count and spawn potion every 6th kill
+                        // Increment kill count
                         killCount++;
+                        totalKills++;
+                        console.log(`✅ Total kills: ${totalKills}, Boss spawned: ${bossSpawned}`);
+
+                        // If boss was killed, resume normal enemy spawning
+                        if (isBoss) {
+                            bossSpawned = false;
+                            killsSinceBoss = 0;
+                            console.log('🔓 Boss defeated! Normal enemies will resume spawning.');
+                        } else {
+                            killsSinceBoss++;
+                        }
+
+                        // Check if we should spawn boss (every 3 normal enemy kills)
+                        if (killsSinceBoss >= 10 && !bossSpawned) {
+                            console.log('🔥 TRIGGERING BOSS SPAWN!');
+                            spawnBoss();
+                        }
+
+                        // Spawn health potion every 6th kill
                         if (killCount % 6 === 0) {
                             const potion = new HealthPotion(scene, deathPosition);
                             potions.push(potion);
@@ -515,11 +718,12 @@ function animate() {
         // Update Enemies
         for (let i = enemies.length - 1; i >= 0; i--) {
             enemies[i].update(delta, player.position, bullets, walls);
+
+            // Clean up enemies that have finished their death animation (isDead = true after 3 seconds)
             if (enemies[i].isDead) {
                 enemies[i].remove();
                 enemies.splice(i, 1);
-                score += 100;
-                scoreEl.innerText = score;
+                // Note: Points already awarded when enemy was killed by bullet
             }
         }
 

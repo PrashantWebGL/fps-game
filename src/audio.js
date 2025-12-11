@@ -90,4 +90,203 @@ export class SoundManager {
         noiseGain.connect(this.ctx.destination);
         noise.start(t);
     }
+
+    playBossSpawn() {
+        if (!this.enabled || this.ctx.state !== 'running') return;
+
+        const t = this.ctx.currentTime;
+
+        // Ominous low rumble
+        const rumble = this.ctx.createOscillator();
+        rumble.type = 'sawtooth';
+        rumble.frequency.setValueAtTime(40, t);
+        rumble.frequency.exponentialRampToValueAtTime(30, t + 1.5);
+
+        const rumbleGain = this.ctx.createGain();
+        rumbleGain.gain.setValueAtTime(0.6, t);
+        rumbleGain.gain.exponentialRampToValueAtTime(0.01, t + 1.5);
+
+        rumble.connect(rumbleGain);
+        rumbleGain.connect(this.ctx.destination);
+        rumble.start(t);
+        rumble.stop(t + 1.5);
+
+        // Warning siren sweep
+        const siren = this.ctx.createOscillator();
+        siren.type = 'sine';
+        siren.frequency.setValueAtTime(200, t + 0.2);
+        siren.frequency.exponentialRampToValueAtTime(800, t + 0.8);
+        siren.frequency.exponentialRampToValueAtTime(200, t + 1.4);
+
+        const sirenGain = this.ctx.createGain();
+        sirenGain.gain.setValueAtTime(0, t + 0.2);
+        sirenGain.gain.linearRampToValueAtTime(0.4, t + 0.4);
+        sirenGain.gain.linearRampToValueAtTime(0.4, t + 1.2);
+        sirenGain.gain.exponentialRampToValueAtTime(0.01, t + 1.5);
+
+        siren.connect(sirenGain);
+        sirenGain.connect(this.ctx.destination);
+        siren.start(t + 0.2);
+        siren.stop(t + 1.5);
+    }
+
+    playBossDown() {
+        if (!this.enabled || this.ctx.state !== 'running') return;
+
+        const t = this.ctx.currentTime;
+
+        // Deep explosion bass
+        const explosion = this.ctx.createOscillator();
+        explosion.type = 'sawtooth';
+        explosion.frequency.setValueAtTime(80, t);
+        explosion.frequency.exponentialRampToValueAtTime(20, t + 0.8);
+
+        const explosionGain = this.ctx.createGain();
+        explosionGain.gain.setValueAtTime(0.8, t);
+        explosionGain.gain.exponentialRampToValueAtTime(0.01, t + 0.8);
+
+        explosion.connect(explosionGain);
+        explosionGain.connect(this.ctx.destination);
+        explosion.start(t);
+        explosion.stop(t + 0.8);
+
+        // Roar/scream effect (distorted noise)
+        const bufferSize = this.ctx.sampleRate * 0.6;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const roar = this.ctx.createBufferSource();
+        roar.buffer = buffer;
+
+        const roarFilter = this.ctx.createBiquadFilter();
+        roarFilter.type = 'bandpass';
+        roarFilter.frequency.setValueAtTime(400, t);
+        roarFilter.frequency.exponentialRampToValueAtTime(100, t + 0.6);
+        roarFilter.Q.value = 5;
+
+        const roarGain = this.ctx.createGain();
+        roarGain.gain.setValueAtTime(0.6, t);
+        roarGain.gain.exponentialRampToValueAtTime(0.01, t + 0.6);
+
+        roar.connect(roarFilter);
+        roarFilter.connect(roarGain);
+        roarGain.connect(this.ctx.destination);
+        roar.start(t);
+
+        // Victory chime (ascending notes)
+        const playChime = (freq, delay) => {
+            const chime = this.ctx.createOscillator();
+            chime.type = 'sine';
+            chime.frequency.value = freq;
+
+            const chimeGain = this.ctx.createGain();
+            chimeGain.gain.setValueAtTime(0.3, t + delay);
+            chimeGain.gain.exponentialRampToValueAtTime(0.01, t + delay + 0.5);
+
+            chime.connect(chimeGain);
+            chimeGain.connect(this.ctx.destination);
+            chime.start(t + delay);
+            chime.stop(t + delay + 0.5);
+        };
+
+        playChime(523, 0.3); // C5
+        playChime(659, 0.45); // E5
+        playChime(784, 0.6); // G5
+        playChime(1047, 0.75); // C6
+    }
+
+    playPotionCollect() {
+        if (!this.enabled || this.ctx.state !== 'running') return;
+
+        const t = this.ctx.currentTime;
+
+        // Magical chime (ascending arpeggio)
+        const playNote = (freq, time, duration) => {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, time);
+
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.1, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            osc.start(time);
+            osc.stop(time + duration);
+        };
+
+        // play E5, G5, B5, E6
+        playNote(659.25, t, 0.5);
+        playNote(783.99, t + 0.1, 0.5);
+        playNote(987.77, t + 0.2, 0.5);
+        playNote(1318.51, t + 0.3, 0.5);
+    }
+
+    playBossAmbient() {
+        if (!this.enabled || this.ctx.state !== 'running') return;
+
+        // Stop existing ambient if any
+        this.stopBossAmbient();
+
+        const t = this.ctx.currentTime;
+
+        // Create a continuous deep drone
+        this.bossAmbientOsc = this.ctx.createOscillator();
+        this.bossAmbientOsc.type = 'sawtooth';
+        this.bossAmbientOsc.frequency.setValueAtTime(30, t); // Low rumble
+
+        // LFO for modulation
+        this.bossAmbientLFO = this.ctx.createOscillator();
+        this.bossAmbientLFO.type = 'sine';
+        this.bossAmbientLFO.frequency.setValueAtTime(0.5, t); // Slow pulse
+
+        const lfoGain = this.ctx.createGain();
+        lfoGain.gain.value = 10; // Modulate frequency by +/- 10Hz
+
+        this.bossAmbientLFO.connect(lfoGain);
+        lfoGain.connect(this.bossAmbientOsc.frequency);
+
+        // Main gain for the ambient sound
+        this.bossAmbientGain = this.ctx.createGain();
+        this.bossAmbientGain.gain.setValueAtTime(0, t);
+        this.bossAmbientGain.gain.linearRampToValueAtTime(0.3, t + 2); // Fade in
+
+        this.bossAmbientOsc.connect(this.bossAmbientGain);
+        this.bossAmbientGain.connect(this.ctx.destination);
+
+        this.bossAmbientOsc.start(t);
+        this.bossAmbientLFO.start(t);
+    }
+
+    stopBossAmbient() {
+        if (this.bossAmbientOsc) {
+            const t = this.ctx.currentTime;
+            // Fade out
+            try {
+                this.bossAmbientGain.gain.cancelScheduledValues(t);
+                this.bossAmbientGain.gain.setValueAtTime(this.bossAmbientGain.gain.value, t);
+                this.bossAmbientGain.gain.linearRampToValueAtTime(0, t + 1);
+
+                const osc = this.bossAmbientOsc;
+                const lfo = this.bossAmbientLFO;
+
+                setTimeout(() => {
+                    osc.stop();
+                    lfo.stop();
+                    osc.disconnect();
+                    lfo.disconnect();
+                }, 1000);
+            } catch (e) {
+                // Ignore errors if already stopped/invalid
+            }
+
+            this.bossAmbientOsc = null;
+            this.bossAmbientLFO = null;
+        }
+    }
 }

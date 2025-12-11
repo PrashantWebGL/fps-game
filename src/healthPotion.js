@@ -68,8 +68,15 @@ export class HealthPotion {
     checkCollision(playerPosition) {
         if (this.isCollected) return false;
 
-        const distance = this.mesh.position.distanceTo(playerPosition);
-        return distance < 0.8; // Collection radius
+        // Cylindrical collision check
+        // Ignore Y height difference as long as it's reasonable (e.g., < 3 units)
+        const dx = this.mesh.position.x - playerPosition.x;
+        const dz = this.mesh.position.z - playerPosition.z;
+        const distanceSq = dx * dx + dz * dz;
+        const dy = Math.abs(this.mesh.position.y - playerPosition.y);
+
+        // Check horizontal distance < 0.8 and vertical distance < 3
+        return distanceSq < (0.8 * 0.8) && dy < 3;
     }
 
     collect() {
