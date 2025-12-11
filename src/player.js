@@ -13,7 +13,12 @@ export class Player {
 
         this.maxHealth = 100;
         this.health = this.maxHealth;
+        this.health = this.maxHealth;
         this.isDead = false;
+
+        // Powerups
+        this.isBurstMode = false;
+        this.isBursting = false;
 
         // Movement
         this.moveForward = false;
@@ -395,8 +400,28 @@ export class Player {
 
     shoot(bullets) {
         if (this.isDead) return;
-        this.weapon.shoot(bullets, 'player');
-        this.soundManager.playGunshot(false);
+
+        if (this.isBurstMode) {
+            // Fire 3 shots rapidly
+            if (this.isBursting) return; // Prevent overlapping bursts
+            this.isBursting = true;
+
+            let shotCount = 0;
+            const burstInterval = setInterval(() => {
+                this.weapon.shoot(bullets, 'player');
+                this.soundManager.playGunshot(false);
+                shotCount++;
+
+                if (shotCount >= 3) {
+                    clearInterval(burstInterval);
+                    this.isBursting = false;
+                }
+            }, 100); // 100ms between shots
+
+        } else {
+            this.weapon.shoot(bullets, 'player');
+            this.soundManager.playGunshot(false);
+        }
     }
 
     takeDamage(amount) {

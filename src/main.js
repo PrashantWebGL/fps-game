@@ -7,6 +7,7 @@ import { Particles } from './particles.js';
 import { GameMap } from './map.js';
 import { SoundManager } from './audio.js';
 import { HealthPotion } from './healthPotion.js';
+import { RedPotion } from './RedPotion.js';
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { inject } from '@vercel/analytics';
 
@@ -127,39 +128,68 @@ let playerName = '';
 let currentDifficulty = 'easy';
 let localScore = 0; // Store last score for display
 
-async function getLeaderboard() {
+async function getLeaderboard(difficulty) {
+    // If difficulty is not provided, default to 'easy' or allow all?
+    // User requested filtering by difficulty.
+    const targetDifficulty = difficulty || 'easy';
+
     if (!isSupabaseConfigured()) {
         const data = localStorage.getItem('fpsLeaderboard');
-        return data ? JSON.parse(data) : [];
+        let parsed = data ? JSON.parse(data) : [];
+        // Local storage might have mixed difficulties if we didn't separate them before.
+        // Let's just filter them now.
+        return parsed.filter(entry => entry.difficulty === targetDifficulty);
     }
 
     const { data, error } = await supabase
         .from('leaderboard')
         .select('*')
+        .eq('difficulty', targetDifficulty)
         .order('score', { ascending: false })
         .limit(10);
 
     if (error) {
         console.error('Error fetching leaderboard:', error);
-        // Show silent error in console, but return empty
         return [];
     }
     return data;
 }
 
+async function getUserRank(score, difficulty) {
+    if (!isSupabaseConfigured()) return 'N/A';
+
+    // Count how many people have a higher score in this difficulty
+    // This gives us the rank (count + 1)
+    const { count, error } = await supabase
+        .from('leaderboard')
+        .select('*', { count: 'exact', head: true })
+        .eq('difficulty', difficulty)
+        .gt('score', score);
+
+    if (error) {
+        console.error('Error fetching rank:', error);
+        return 'N/A';
+    }
+    return count + 1;
+}
+
 async function saveScore(name, score, difficulty) {
     if (!isSupabaseConfigured()) {
-        const leaderboard = await getLeaderboard();
+        let leaderboard = JSON.parse(localStorage.getItem('fpsLeaderboard') || '[]');
         leaderboard.push({
             name: name || 'Anonymous',
             score,
             difficulty: difficulty || 'easy',
             date: new Date().toISOString()
         });
+        // Sort entire local leaderboard first? Or just by difficulty?
+        // Let's keep existing behavior but just filter on read.
         leaderboard.sort((a, b) => b.score - a.score);
-        const top10 = leaderboard.slice(0, 10);
-        localStorage.setItem('fpsLeaderboard', JSON.stringify(top10));
-        return top10;
+        // Keep top 50 locally to allow for multiple difficulties
+        const top50 = leaderboard.slice(0, 50);
+        localStorage.setItem('fpsLeaderboard', JSON.stringify(top50));
+
+        return top50.filter(e => e.difficulty === difficulty).slice(0, 10);
     }
 
     const { error } = await supabase
@@ -177,18 +207,34 @@ async function saveScore(name, score, difficulty) {
         alert(`Supabase Error: ${error.message}\n\nHint: Check your Table RLS Polices! Did you disable RLS or add a policy for Anon Key?`);
     }
 
-    return await getLeaderboard();
+    return await getLeaderboard(difficulty);
 }
 
-async function showLeaderboard(currentScore) {
+async function showLeaderboard(currentScore, viewOnly = false) {
     // If not configued, show local warning
     let warningHTML = '';
     if (!isSupabaseConfigured()) {
         warningHTML = '<div style="color: yellow; text-align: center; margin-bottom: 10px; font-size: 14px;">⚠️ Global Leaderboard Not Configured (Using Local)</div>';
     }
 
-    // Save and fetch global
-    const leaderboard = await saveScore(playerName, currentScore, currentDifficulty);
+    let leaderboard;
+    if (viewOnly) {
+        leaderboard = await getLeaderboard(currentDifficulty);
+    } else {
+        leaderboard = await saveScore(playerName, currentScore, currentDifficulty);
+    }
+
+    // Get global rank if not viewing only (or even if viewing only? currentScore is relevant)
+    let globalRank = '...';
+    if (isSupabaseConfigured()) {
+        globalRank = await getUserRank(currentScore, currentDifficulty);
+        if (globalRank !== 'N/A') globalRank = '#' + globalRank;
+    } else {
+        // Calculate local rank
+        const localData = JSON.parse(localStorage.getItem('fpsLeaderboard') || '[]');
+        const betterScores = localData.filter(e => e.difficulty === currentDifficulty && e.score > currentScore).length;
+        globalRank = '#' + (betterScores + 1) + ' (Local)';
+    }
 
     let tableRows = '';
 
@@ -196,16 +242,15 @@ async function showLeaderboard(currentScore) {
         tableRows = `
             <tr>
                 <td colspan="4" style="color: white; font-size: 20px; padding: 30px; text-align: center;">
-                    No scores yet! Be the first!
+                    No scores yet for ${currentDifficulty.toUpperCase()}! Be the first!
                 </td>
             </tr>
         `;
     } else {
         leaderboard.forEach((entry, index) => {
-            // Highlighting current player globally is tricky without Auth ID.
-            // We can match by name and score, but it might highlight duplicates.
-            const isCurrentPlayer = entry.name === playerName && entry.score === currentScore;
-            // Or just check if index matches the one we just inserted? No, we re-fetched.
+            // Highlighting current player is tricky globally.
+            // We highlight if name matches and score matches (heuristic).
+            const isCurrentPlayer = !viewOnly && entry.name === playerName && entry.score === currentScore;
 
             const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
             const rank = medal || (index + 1);
@@ -231,15 +276,22 @@ async function showLeaderboard(currentScore) {
         });
     }
 
+    // Rank Display Logic when viewing only vs dying
+    const rankDisplay = viewOnly
+        ? `<p style="color: white; font-size: 16px; text-align: center;">Current Difficulty: <b style="color:#00ff88">${currentDifficulty.toUpperCase()}</b></p>`
+        : `<p style="color: white; font-size: 18px; text-align: center; margin: 5px 0 15px 0;">
+                Your Score: <span style="color: #ffd700; font-size: 26px; font-weight: bold;">${currentScore}</span>
+                <span style="color: #aaa; margin: 0 10px;">|</span>
+                Global Rank: <span style="color: #00ff88; font-size: 26px; font-weight: bold;">${globalRank}</span>
+           </p>`;
+
     return `
         <div style="background: #1a1a1aee; padding: 30px; border-radius: 20px; border: 3px solid #ffd700; max-width: 800px; max-height: 90vh; margin: 0 auto; display: flex; flex-direction: column;">
             <h1 style="color: #ffd700; font-size: 36px; text-align: center; margin: 0 0 10px 0;">
                 🏆 LEADERBOARD 🏆
             </h1>
             ${warningHTML}
-            <p style="color: white; font-size: 18px; text-align: center; margin: 5px 0 15px 0;">
-                Your Score: <span style="color: #ffd700; font-size: 26px; font-weight: bold;">${currentScore}</span>
-            </p>
+            ${rankDisplay}
             
             <div style="background: #00000066; padding: 15px; border-radius: 12px; border: 2px solid #ffd70066; overflow-y: auto; flex: 1;">
                 <table style="width: 100%; border-collapse: collapse; color: white;">
@@ -265,8 +317,8 @@ async function showLeaderboard(currentScore) {
                 </table>
             </div>
             
-            <button onclick="location.reload()" style="margin-top: 20px; padding: 15px 40px; font-size: 18px; font-weight: bold; cursor: pointer; background: #00ff00; color: black; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 255, 0, 0.3); transition: all 0.2s;">
-                🔄 PLAY AGAIN
+            <button onclick="${viewOnly ? 'window.closeLeaderboard()' : 'location.reload()'}" style="margin-top: 20px; padding: 15px 40px; font-size: 18px; font-weight: bold; cursor: pointer; background: #00ff00; color: black; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 255, 0, 0.3); transition: all 0.2s;">
+                🔄 ${viewOnly ? 'CLOSE' : 'PLAY AGAIN'}
             </button>
         </div>
     `;
@@ -315,6 +367,9 @@ function startGame(difficulty) {
     instructionsEl.style.display = 'none';
     instructionsEl.style.visibility = 'hidden';
     instructionsEl.style.opacity = '0';
+
+    // Update HUD Name
+    document.getElementById('hud-player-name').textContent = playerName.toUpperCase();
 }
 
 const nameInput = document.getElementById('player-name');
@@ -322,6 +377,41 @@ const btnEasy = document.getElementById('btn-easy');
 const btnMedium = document.getElementById('btn-medium');
 const btnHard = document.getElementById('btn-hard');
 const buttons = [btnEasy, btnMedium, btnHard];
+const btnShowLeaderboard = document.getElementById('btn-show-leaderboard');
+
+// Create a safe close function for the leaderboard
+window.closeLeaderboard = function () {
+    const instructions = document.getElementById('instructions');
+    instructions.style.display = 'none';
+    instructions.style.visibility = 'hidden';
+    instructions.style.opacity = '0';
+    if (gameStarted && !player.isDead) {
+        try {
+            document.body.requestPointerLock();
+        } catch (e) { console.log('Could not re-lock pointer'); }
+    }
+};
+
+// Leaderboard Button Click
+if (btnShowLeaderboard) {
+    btnShowLeaderboard.addEventListener('click', async (e) => {
+        e.stopPropagation(); // Prevent clicks from shooting
+
+        // Pause/Unlock cursor
+        if (document.pointerLockElement) {
+            document.exitPointerLock();
+        }
+
+        const instructions = document.getElementById('instructions');
+        instructions.innerHTML = '<h1 style="color:white; text-align:center; margin-top: 200px;">LOADING RANKS...</h1>';
+        instructions.style.display = 'block';
+        instructions.style.visibility = 'visible';
+        instructions.style.opacity = '1';
+
+        const html = await showLeaderboard(score, true); // true = viewOnly
+        instructions.innerHTML = html;
+    });
+}
 
 // Disable initially
 buttons.forEach(btn => {
@@ -347,6 +437,17 @@ btnHard.addEventListener('click', () => { if (playerName.length > 3) startGame('
 // Handle player death
 window.addEventListener('playerDied', async (event) => {
     console.log('Player died event triggered, score:', score);
+
+    // Stop boss music if playing
+    soundManager.stopBossAmbient();
+
+    // Disable Leaderboard Button
+    if (btnShowLeaderboard) {
+        btnShowLeaderboard.disabled = true;
+        btnShowLeaderboard.style.opacity = '0.5';
+        btnShowLeaderboard.style.cursor = 'not-allowed';
+    }
+
     player.setFinalScore(score);
     const instructions = document.getElementById('instructions');
     // Show loading text while fetching async leaderboard
@@ -355,7 +456,7 @@ window.addEventListener('playerDied', async (event) => {
     instructions.style.visibility = 'visible';
     instructions.style.opacity = '1';
 
-    const leaderboardHTML = await showLeaderboard(score);
+    const leaderboardHTML = await showLeaderboard(score); // false = save score
     console.log('Leaderboard HTML generated, length:', leaderboardHTML.length);
     instructions.innerHTML = leaderboardHTML;
 });
@@ -392,14 +493,14 @@ player.controls.addEventListener('unlock', () => {
 });
 
 // Message Display System
-function showMessage(text, duration = 2000, color = '#FFD700') {
+function showMessage(text, duration = 2000, color = '#FFD700', fontSize = '48px') {
     const messageEl = document.createElement('div');
     messageEl.style.cssText = `
         position: fixed;
-        top: 50%;
+        top: 15%;
         left: 50%;
         transform: translate(-50%, -50%);
-        font-size: 48px;
+        font-size: ${fontSize};
         font-weight: bold;
         color: ${color};
         text-shadow: 0 0 20px ${color}, 0 0 40px ${color}, 0 4px 8px rgba(0,0,0,0.8);
@@ -556,15 +657,45 @@ function animate() {
         }
 
         // Update Potions
+        const currentTime = performance.now();
         for (let i = potions.length - 1; i >= 0; i--) {
             const potion = potions[i];
             potion.update(delta);
 
+            // Green Potion Timeout (15 seconds)
+            // Check if potion is HealthPotion (using instanceof or property)
+            // We set spawnTime when creating HealthPotion
+            if (potion instanceof HealthPotion && potion.spawnTime) {
+                if (currentTime - potion.spawnTime > 15000) { // 15 seconds
+                    potion.remove();
+                    potions.splice(i, 1);
+                    continue;
+                }
+            }
+
             // Check if player collects potion
             if (potion.checkCollision(player.dummyCamera.position)) {
-                const healAmount = potion.collect();
-                player.heal(healAmount);
-                soundManager.playPotionCollect();
+                const result = potion.collect();
+
+                if (result === 'burst') {
+                    // Start Burst Mode
+                    player.isBurstMode = true;
+                    soundManager.playPowerupCollect();
+                    showMessage('BURST MODE ACTIVATED', 2000, '#ff0000', '32px');
+
+                    // Reset timer if already active to extend duration? Or just let it run?
+                    if (player.burstTimer) clearTimeout(player.burstTimer);
+
+                    player.burstTimer = setTimeout(() => {
+                        player.isBurstMode = false;
+                        showMessage('BURST MODE DEACTIVATED', 2000, '#ffffff', '24px');
+                    }, 30000); // 30 seconds
+                } else {
+                    // Health Potion
+                    player.heal(result);
+                    soundManager.playPotionCollect();
+                }
+
                 potion.remove();
                 potions.splice(i, 1);
             }
@@ -647,7 +778,11 @@ function animate() {
                     // Calculate damage before applying it
                     let multiplier = 1.0;
                     const partName = closestHit.partName;
-                    if (partName === 'head') multiplier = 2.0;
+                    if (partName === 'head') {
+                        multiplier = 2.0;
+                        showMessage('Headshot !!', 700, '#ff0000', '24px');
+                        soundManager.playHeadshot();
+                    }
                     else if (partName === 'torso' || partName === 'body') multiplier = 1.0;
                     else multiplier = 0.68;
                     const finalDamage = 50 * multiplier;
@@ -674,6 +809,11 @@ function animate() {
                             soundManager.stopBossAmbient();
                             console.log('🎉 BIG BOSS DOWN! +500 points');
                             showMessage('💀 BIG BOSS DOWN! +500 💀', 3000, '#FF0000');
+
+                            // Spawn Red Potion
+                            const redPotion = new RedPotion(scene, deathPosition, particles);
+                            potions.push(redPotion);
+
                         } else {
                             score += 100; // Normal enemy
                         }
@@ -701,7 +841,8 @@ function animate() {
 
                         // Spawn health potion every 6th kill
                         if (killCount % 6 === 0) {
-                            const potion = new HealthPotion(scene, deathPosition);
+                            const potion = new HealthPotion(scene, deathPosition, particles);
+                            potion.spawnTime = performance.now(); // Track spawn time
                             potions.push(potion);
                         }
                     }

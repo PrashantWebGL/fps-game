@@ -201,6 +201,15 @@
   <div id="ui">
     <div id="hud-top-right">
       <div class="hud-container">
+        <!-- Player Name -->
+        <div class="hud-row" style="margin-bottom: 5px;">
+          <div class="stat-left">
+            <span class="hud-icon" style="color: #ffffff;">👤</span>
+            <span class="hud-label">PLAYER</span>
+          </div>
+          <div id="hud-player-name" class="hud-value" style="font-size: 18px; color: #ffffff;">-</div>
+        </div>
+
         <!-- Health -->
         <div class="hud-row">
           <div class="stat-left">
@@ -223,12 +232,21 @@
         </div>
 
         <!-- Ammo -->
-        <div class="hud-row">
+        <!-- <div class="hud-row">
           <div class="stat-left">
             <span class="hud-icon" style="color: #00ff88;">⚡</span>
             <span class="hud-label">Ammo</span>
           </div>
           <div id="ammo-value" class="hud-value">∞</div>
+        </div> -->
+
+        <!-- Leaderboard Button -->
+        <div class="hud-row"
+          style="margin-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 15px; justify-content: center;">
+          <button id="btn-show-leaderboard"
+            style="width: 100%; padding: 10px; font-size: 14px; font-weight: bold; cursor: pointer; background: rgba(255, 215, 0, 0.2); color: #ffd700; border: 1px solid #ffd700; border-radius: 6px; box-shadow: 0 0 10px rgba(255, 215, 0, 0.1); transition: all 0.2s; pointer-events: auto; font-family: 'Courier New', monospace;">
+            🏆 VIEW RANKS
+          </button>
         </div>
       </div>
     </div>

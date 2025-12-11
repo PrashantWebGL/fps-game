@@ -37,6 +37,37 @@ export class Particles {
         }
     }
 
+    createExplosion(position, color, count = 20) {
+        // Reuse or create specialized materials
+        if (!this.explosionGeometry) {
+            this.explosionGeometry = new THREE.SphereGeometry(0.05, 4, 4);
+        }
+
+        // Cache materials by color (simple cache)
+        if (!this.materials) this.materials = {};
+        if (!this.materials[color]) {
+            this.materials[color] = new THREE.MeshBasicMaterial({ color: color });
+        }
+
+        for (let i = 0; i < count; i++) {
+            const mesh = new THREE.Mesh(this.explosionGeometry, this.materials[color]);
+            mesh.position.copy(position);
+
+            const velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 3,
+                Math.random() * 3,
+                (Math.random() - 0.5) * 3
+            );
+
+            this.particles.push({
+                mesh: mesh,
+                velocity: velocity,
+                life: 0.5 // 0.5 second life
+            });
+            this.scene.add(mesh);
+        }
+    }
+
     update(delta) {
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];

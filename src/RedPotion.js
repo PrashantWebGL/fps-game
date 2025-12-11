@@ -1,25 +1,23 @@
-// End of filejavascript
 import * as THREE from 'three';
 
-export class HealthPotion {
+export class RedPotion {
     constructor(scene, position, particlesManager) {
         this.scene = scene;
         this.particlesManager = particlesManager;
-        this.healAmount = 15;
         this.isCollected = false;
         this.rotationSpeed = 2;
         this.bobSpeed = 3;
         this.bobAmount = 0.2;
         this.time = 0;
 
-        // Create potion mesh (glowing green bottle)
+        // Create potion mesh (glowing red bottle)
         this.mesh = new THREE.Group();
 
         // Bottle body
         const bottleGeometry = new THREE.CylinderGeometry(0.15, 0.2, 0.5, 8);
         const bottleMaterial = new THREE.MeshStandardMaterial({
-            color: 0x00ff00,
-            emissive: 0x00ff00,
+            color: 0xff0000,
+            emissive: 0xff0000,
             emissiveIntensity: 0.5,
             transparent: true,
             opacity: 0.8
@@ -37,7 +35,7 @@ export class HealthPotion {
         cap.position.y = 0.55;
 
         // Glow light
-        this.glowLight = new THREE.PointLight(0x00ff00, 1, 3);
+        this.glowLight = new THREE.PointLight(0xff0000, 1, 3);
         this.glowLight.position.y = 0.3;
 
         this.mesh.add(bottle);
@@ -71,7 +69,6 @@ export class HealthPotion {
         if (this.isCollected) return false;
 
         // Cylindrical collision check
-        // Ignore Y height difference as long as it's reasonable (e.g., < 3 units)
         const dx = this.mesh.position.x - playerPosition.x;
         const dz = this.mesh.position.z - playerPosition.z;
         const distanceSq = dx * dx + dz * dz;
@@ -85,11 +82,12 @@ export class HealthPotion {
         this.isCollected = true;
 
         // Create collection particle effect
+        // Create collection particle effect
         if (this.particlesManager) {
-            this.particlesManager.createExplosion(this.mesh.position, 0x00ff00, 20);
+            this.particlesManager.createExplosion(this.mesh.position, 0xff0000, 20);
         }
 
-        return this.healAmount;
+        return 'burst';
     }
 
     remove() {

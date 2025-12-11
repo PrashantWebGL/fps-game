@@ -10,6 +10,32 @@ export class SoundManager {
             }
             this.enabled = true;
         }, { once: true });
+
+        // Load Headshot Sound
+        this.headshotBuffer = null;
+        fetch('/assets/sounds/headshot.mp3')
+            .then(response => response.arrayBuffer())
+            .then(arrayBuffer => this.ctx.decodeAudioData(arrayBuffer))
+            .then(audioBuffer => {
+                this.headshotBuffer = audioBuffer;
+                console.log('Headshot sound loaded');
+            })
+            .catch(e => console.error('Error loading headshot sound:', e));
+    }
+
+    playHeadshot() {
+        if (!this.enabled || !this.headshotBuffer || this.ctx.state !== 'running') return;
+
+        const source = this.ctx.createBufferSource();
+        source.buffer = this.headshotBuffer;
+
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0.8;
+
+        source.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        source.start(0);
     }
 
     playFootstep(volume = 0.5) {
@@ -225,6 +251,40 @@ export class SoundManager {
         playNote(783.99, t + 0.1, 0.5);
         playNote(987.77, t + 0.2, 0.5);
         playNote(1318.51, t + 0.3, 0.5);
+    }
+
+    playPowerupCollect() {
+        if (!this.enabled || this.ctx.state !== 'running') return;
+        const t = this.ctx.currentTime;
+
+        // More intense powerup sound (Major chord, Sawtooth, rapid)
+        const playNote = (freq, time) => {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sawtooth';
+            osc.frequency.value = freq;
+
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.1, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
+
+            // Lowpass filter for "wah" effect
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(200, time);
+            filter.frequency.linearRampToValueAtTime(3000, time + 0.1);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            osc.start(time);
+            osc.stop(time + 0.5);
+        };
+
+        playNote(440, t);       // A4
+        playNote(554.37, t);    // C#5
+        playNote(659.25, t);    // E5
+        playNote(880, t + 0.1); // A5
     }
 
     playBossAmbient() {
