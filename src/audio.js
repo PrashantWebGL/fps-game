@@ -21,6 +21,18 @@ export class SoundManager {
                 console.log('Headshot sound loaded');
             })
             .catch(e => console.error('Error loading headshot sound:', e));
+
+        // Load Heavy Breathing Sound
+        this.breathingBuffer = null;
+        this.breathingSource = null;
+        fetch('/assets/sounds/heavybreathing.mp3')
+            .then(response => response.arrayBuffer())
+            .then(arrayBuffer => this.ctx.decodeAudioData(arrayBuffer))
+            .then(audioBuffer => {
+                this.breathingBuffer = audioBuffer;
+                console.log('Breathing sound loaded');
+            })
+            .catch(e => console.error('Error loading breathing sound:', e));
     }
 
     playHeadshot() {
@@ -347,6 +359,37 @@ export class SoundManager {
 
             this.bossAmbientOsc = null;
             this.bossAmbientLFO = null;
+        }
+    }
+
+
+
+    playBreathing() {
+        if (!this.enabled || !this.breathingBuffer || this.ctx.state !== 'running') return;
+
+        // If already playing, do nothing
+        if (this.breathingSource) return;
+
+        this.breathingSource = this.ctx.createBufferSource();
+        this.breathingSource.buffer = this.breathingBuffer;
+        this.breathingSource.loop = true; // Loop continuously
+
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0.6;
+
+        this.breathingSource.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        this.breathingSource.start(0);
+    }
+
+    stopBreathing() {
+        if (this.breathingSource) {
+            try {
+                this.breathingSource.stop();
+            } catch (e) { }
+            this.breathingSource.disconnect();
+            this.breathingSource = null;
         }
     }
 }

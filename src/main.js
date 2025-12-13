@@ -50,47 +50,14 @@ const skyMat = new THREE.MeshBasicMaterial({
 const sky = new THREE.Mesh(skyGeo, skyMat);
 scene.add(sky);
 
-// Trees
-const treePositions = [];
-function createTree(x, z) {
-    const tree = new THREE.Group();
-
-    // Trunk
-    const trunkGeo = new THREE.CylinderGeometry(0.5, 0.8, 4, 8);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-    trunk.position.y = 2;
-    trunk.castShadow = true;
-    tree.add(trunk);
-
-    // Leaves
-    const leavesGeo = new THREE.ConeGeometry(3, 6, 8);
-    const leavesMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
-    const leaves = new THREE.Mesh(leavesGeo, leavesMat);
-    leaves.position.y = 5;
-    leaves.castShadow = true;
-    tree.add(leaves);
-
-    tree.position.set(x, 0, z);
-    scene.add(tree);
-    // Store position for spawn checks
-    treePositions.push(new THREE.Vector3(x, 0, z));
-}
-
-
-// Generate Forest Boundary
-for (let i = 0; i < 50; i++) {
-    const angle = (i / 50) * Math.PI * 2;
-    const radius = 45 + Math.random() * 5; // Outside the 100x100 floor (radius 50)
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-    createTree(x, z);
-}
+// Trees moved to GameMap class
+// const treePositions = []; // Removed, utilizing gameMap.treePositions
 
 // Map Generation
 const gameMap = new GameMap(scene);
 gameMap.create();
-const walls = gameMap.walls; // Expose walls for collision
+// const walls = gameMap.walls; // Removed to avoid stale reference
+
 
 // Game State
 const bullets = [];
@@ -101,7 +68,7 @@ const soundManager = new SoundManager();
 // Player
 const player = new Player(camera, scene, document.body, soundManager);
 scene.add(player.hitbox); // Add hitbox to scene for debugging/logic
-player.dummyCamera.position.set(30, 2, -20); // Start position (Outside House)
+player.dummyCamera.position.set(0, 2, 10); // Start position (Safe Zone)
 
 let lastTime = performance.now();
 let score = 0;
@@ -175,8 +142,10 @@ async function getUserRank(score, difficulty) {
 
 async function saveScore(name, score, difficulty) {
     if (!isSupabaseConfigured()) {
+        const id = Date.now().toString(); // Local fake ID
         let leaderboard = JSON.parse(localStorage.getItem('fpsLeaderboard') || '[]');
         leaderboard.push({
+            id,
             name: name || 'Anonymous',
             score,
             difficulty: difficulty || 'easy',
@@ -189,10 +158,10 @@ async function saveScore(name, score, difficulty) {
         const top50 = leaderboard.slice(0, 50);
         localStorage.setItem('fpsLeaderboard', JSON.stringify(top50));
 
-        return top50.filter(e => e.difficulty === difficulty).slice(0, 10);
+        return { id, leaderboard: top50.filter(e => e.difficulty === difficulty).slice(0, 10) };
     }
 
-    const { error } = await supabase
+    const { data: insertedData, error } = await supabase
         .from('leaderboard')
         .insert([
             {
@@ -200,14 +169,20 @@ async function saveScore(name, score, difficulty) {
                 score: score,
                 difficulty: difficulty || 'easy'
             }
-        ]);
+        ])
+        .select(); // Fetch the inserted row to get ID
+
+    let newId = null;
+    if (insertedData && insertedData.length > 0) {
+        newId = insertedData[0].id;
+    }
 
     if (error) {
         console.error('Error saving score:', error);
         alert(`Supabase Error: ${error.message}\n\nHint: Check your Table RLS Polices! Did you disable RLS or add a policy for Anon Key?`);
     }
 
-    return await getLeaderboard(difficulty);
+    return { id: newId, leaderboard: await getLeaderboard(difficulty) };
 }
 
 async function showLeaderboard(currentScore, viewOnly = false) {
@@ -218,22 +193,44 @@ async function showLeaderboard(currentScore, viewOnly = false) {
     }
 
     let leaderboard;
+    let newScoreId = null;
+
     if (viewOnly) {
         leaderboard = await getLeaderboard(currentDifficulty);
     } else {
-        leaderboard = await saveScore(playerName, currentScore, currentDifficulty);
+        const result = await saveScore(playerName, currentScore, currentDifficulty);
+        leaderboard = result.leaderboard;
+        newScoreId = result.id;
     }
 
-    // Get global rank if not viewing only (or even if viewing only? currentScore is relevant)
+    // Get global rank logic
     let globalRank = '...';
-    if (isSupabaseConfigured()) {
-        globalRank = await getUserRank(currentScore, currentDifficulty);
-        if (globalRank !== 'N/A') globalRank = '#' + globalRank;
+
+    // Check if player is present in current leaderboard page
+    let foundInListIndex = -1;
+    if (newScoreId) {
+        foundInListIndex = leaderboard.findIndex(e => e.id === newScoreId);
+    } else if (!viewOnly && !isSupabaseConfigured()) {
+        // Fallback for local storage without robust ID persistence in memory (though we added it)
+        foundInListIndex = leaderboard.findIndex(e => e.score === currentScore && e.name === playerName);
+    }
+
+    // Rank Sync Logic:
+    // 1. If we found the player in the list, their rank is index + 1
+    // 2. If not found (out of top 10), we fetch DB rank
+
+    if (foundInListIndex !== -1) {
+        globalRank = '#' + (foundInListIndex + 1);
     } else {
-        // Calculate local rank
-        const localData = JSON.parse(localStorage.getItem('fpsLeaderboard') || '[]');
-        const betterScores = localData.filter(e => e.difficulty === currentDifficulty && e.score > currentScore).length;
-        globalRank = '#' + (betterScores + 1) + ' (Local)';
+        if (isSupabaseConfigured()) {
+            globalRank = await getUserRank(currentScore, currentDifficulty);
+            if (globalRank !== 'N/A') globalRank = '#' + globalRank;
+        } else {
+            // Calculate local rank
+            const localData = JSON.parse(localStorage.getItem('fpsLeaderboard') || '[]');
+            const betterScores = localData.filter(e => e.difficulty === currentDifficulty && e.score > currentScore).length;
+            globalRank = '#' + (betterScores + 1) + ' (Local)';
+        }
     }
 
     let tableRows = '';
@@ -248,9 +245,14 @@ async function showLeaderboard(currentScore, viewOnly = false) {
         `;
     } else {
         leaderboard.forEach((entry, index) => {
-            // Highlighting current player is tricky globally.
-            // We highlight if name matches and score matches (heuristic).
-            const isCurrentPlayer = !viewOnly && entry.name === playerName && entry.score === currentScore;
+            // Highlighting based on Unique ID
+            let isCurrentPlayer = false;
+
+            if (!viewOnly && newScoreId) {
+                isCurrentPlayer = entry.id === newScoreId;
+            } else if (!viewOnly && !isSupabaseConfigured()) {
+                isCurrentPlayer = entry.id === newScoreId; // Local adds IDs now
+            }
 
             const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
             const rank = medal || (index + 1);
@@ -286,8 +288,8 @@ async function showLeaderboard(currentScore, viewOnly = false) {
            </p>`;
 
     return `
-        <div style="background: #1a1a1aee; padding: 30px; border-radius: 20px; border: 3px solid #ffd700; max-width: 800px; max-height: 90vh; margin: 0 auto; display: flex; flex-direction: column;">
-            <h1 style="color: #ffd700; font-size: 36px; text-align: center; margin: 0 0 10px 0;">
+        <div style="background: #1a1a1aee; padding: 20px; border-radius: 20px; border: 3px solid #ffd700; width: 95%; max-width: 800px; max-height: 85vh; margin: 0 auto; display: flex; flex-direction: column;">
+            <h1 style="color: #ffd700; font-size: 28px; text-align: center; margin: 0 0 10px 0;">
                 🏆 LEADERBOARD 🏆
             </h1>
             ${warningHTML}
@@ -318,7 +320,7 @@ async function showLeaderboard(currentScore, viewOnly = false) {
             </div>
             
             <button onclick="${viewOnly ? 'window.closeLeaderboard()' : 'location.reload()'}" style="margin-top: 20px; padding: 15px 40px; font-size: 18px; font-weight: bold; cursor: pointer; background: #00ff00; color: black; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 255, 0, 0.3); transition: all 0.2s;">
-                🔄 ${viewOnly ? 'CLOSE' : 'PLAY AGAIN'}
+                ${viewOnly ? '✕ CLOSE' : '🔄 PLAY AGAIN'}
             </button>
         </div>
     `;
@@ -336,11 +338,52 @@ function showMobileStartOverlay() {
         mobileStartEl.style.display = 'flex';
     }
 }
-// Don't auto-show mobile overlay - let users see difficulty selection
 // showMobileStartOverlay();
 
 // Mobile users will use the same difficulty selection as desktop
 // No need for separate "tap to play" overlay
+
+const btnFullscreen = document.getElementById('btn-fullscreen');
+const btnPause = document.getElementById('btn-pause');
+const mobileControlsTop = document.getElementById('mobile-controls-top');
+
+if (isMobile) {
+    if (mobileControlsTop) mobileControlsTop.style.display = 'flex';
+
+    if (btnFullscreen) {
+        btnFullscreen.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log(`Error attempting to enable fullscreen: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        });
+    }
+
+    if (btnPause) {
+        btnPause.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (window.isGamePaused) {
+                // Resume
+                window.isGamePaused = false;
+                instructionsEl.style.display = 'none';
+                btnPause.innerText = '⏸️';
+            } else {
+                // Pause
+                window.isGamePaused = true;
+                instructionsEl.style.display = 'block';
+                instructionsEl.innerHTML = '<h1>PAUSED</h1><p>Tap to Resume</p>';
+                soundManager.stopBreathing();
+                btnPause.innerText = '▶️';
+            }
+        });
+    }
+}
+
 
 // Difficulty Selection
 function startGame(difficulty) {
@@ -355,6 +398,20 @@ function startGame(difficulty) {
         case 'hard': maxEnemies = 4; break;
     }
     gameStarted = true;
+    // Reset score saved flag for new game
+    window.isScoreSavedForThisRun = false;
+
+    // Explicitly reset breathing sound
+    soundManager.stopBreathing();
+
+    // Reset player state
+    player.isDead = false;
+    player.health = player.maxHealth;
+    player.finalScore = 0;
+
+    // Blur potential inputs
+    if (document.activeElement) document.activeElement.blur();
+
     try {
         if (!isMobile) {
             player.controls.lock();
@@ -372,6 +429,54 @@ function startGame(difficulty) {
     document.getElementById('hud-player-name').textContent = playerName.toUpperCase();
 }
 
+// Map Selection State
+let selectedMap = 'house'; // 'house' or 'jungle'
+
+// Map Buttons
+const btnMapHouse = document.getElementById('btn-map-house');
+const btnMapCity = document.getElementById('btn-map-city');
+
+function updateMapButtons() {
+    if (selectedMap === 'house') {
+        btnMapHouse.style.background = '#ffffff';
+        btnMapHouse.style.color = '#000000';
+        btnMapHouse.style.borderColor = '#00ff00';
+
+        btnMapCity.style.background = 'rgba(0,0,0,0.5)';
+        btnMapCity.style.color = '#ffffff';
+        btnMapCity.style.borderColor = 'rgba(255,255,255,0.3)';
+    } else {
+        btnMapCity.style.background = '#ffffff';
+        btnMapCity.style.color = '#000000';
+        btnMapCity.style.borderColor = '#00ff00';
+
+        btnMapHouse.style.background = 'rgba(0,0,0,0.5)';
+        btnMapHouse.style.color = '#ffffff';
+        btnMapHouse.style.borderColor = 'rgba(255,255,255,0.3)';
+    }
+}
+
+btnMapHouse.addEventListener('click', () => {
+    if (selectedMap === 'house') return;
+    selectedMap = 'house';
+    updateMapButtons();
+    gameMap.clear();
+    gameMap.createHouseLevel();
+    // Reset player position?
+    player.dummyCamera.position.set(0, 2, 10);
+});
+
+btnMapCity.addEventListener('click', () => {
+    if (selectedMap === 'city') return;
+    selectedMap = 'city';
+    updateMapButtons();
+
+    gameMap.clear();
+    gameMap.createCityLevel();
+    player.dummyCamera.position.set(0, 2, 10);
+});
+
+// Start Game Logic
 const nameInput = document.getElementById('player-name');
 const btnEasy = document.getElementById('btn-easy');
 const btnMedium = document.getElementById('btn-medium');
@@ -381,14 +486,19 @@ const btnShowLeaderboard = document.getElementById('btn-show-leaderboard');
 
 // Create a safe close function for the leaderboard
 window.closeLeaderboard = function () {
-    const instructions = document.getElementById('instructions');
-    instructions.style.display = 'none';
-    instructions.style.visibility = 'hidden';
-    instructions.style.opacity = '0';
+    const lbOverlay = document.getElementById('leaderboard-overlay');
+    if (lbOverlay) {
+        lbOverlay.style.display = 'none';
+        lbOverlay.innerHTML = ''; // Clear content
+    }
+
+    // Only mess with instructions/pointer lock if we are IN GAME
     if (gameStarted && !player.isDead) {
         try {
             document.body.requestPointerLock();
         } catch (e) { console.log('Could not re-lock pointer'); }
+        const instructions = document.getElementById('instructions');
+        instructions.style.display = 'none';
     }
 };
 
@@ -397,19 +507,18 @@ if (btnShowLeaderboard) {
     btnShowLeaderboard.addEventListener('click', async (e) => {
         e.stopPropagation(); // Prevent clicks from shooting
 
-        // Pause/Unlock cursor
         if (document.pointerLockElement) {
             document.exitPointerLock();
         }
 
-        const instructions = document.getElementById('instructions');
-        instructions.innerHTML = '<h1 style="color:white; text-align:center; margin-top: 200px;">LOADING RANKS...</h1>';
-        instructions.style.display = 'block';
-        instructions.style.visibility = 'visible';
-        instructions.style.opacity = '1';
+        const lbOverlay = document.getElementById('leaderboard-overlay');
+        lbOverlay.innerHTML = '<h1 style="color:white; text-align:center; margin-top: 200px;">LOADING RANKS...</h1>';
+        lbOverlay.style.display = 'flex'; // Use flex to center
 
         const html = await showLeaderboard(score, true); // true = viewOnly
-        instructions.innerHTML = html;
+        lbOverlay.innerHTML = html;
+
+        // Ensure the close button in the HTML calls window.closeLeaderboard()
     });
 }
 
@@ -419,8 +528,15 @@ buttons.forEach(btn => {
     btn.style.opacity = '0.5';
     btn.style.cursor = 'not-allowed';
 });
+if (btnShowLeaderboard) {
+    btnShowLeaderboard.disabled = true;
+    btnShowLeaderboard.style.opacity = '0.5';
+    btnShowLeaderboard.style.cursor = 'not-allowed';
+}
 
 nameInput.addEventListener('input', (e) => {
+    // Validation: Only alphanumerics, underscores, hyphens, dollars
+    e.target.value = e.target.value.replace(/[^a-zA-Z0-9_$-]/g, '');
     playerName = e.target.value;
     const isValid = playerName.length > 3;
     buttons.forEach(btn => {
@@ -428,6 +544,11 @@ nameInput.addEventListener('input', (e) => {
         btn.style.opacity = isValid ? '1' : '0.5';
         btn.style.cursor = isValid ? 'pointer' : 'not-allowed';
     });
+    if (btnShowLeaderboard) {
+        btnShowLeaderboard.disabled = !isValid;
+        btnShowLeaderboard.style.opacity = isValid ? '1' : '0.5';
+        btnShowLeaderboard.style.cursor = isValid ? 'pointer' : 'not-allowed';
+    }
 });
 
 btnEasy.addEventListener('click', () => { if (playerName.length > 3) startGame('easy'); });
@@ -456,7 +577,15 @@ window.addEventListener('playerDied', async (event) => {
     instructions.style.visibility = 'visible';
     instructions.style.opacity = '1';
 
+    // Fix: Use global/closure variable instead of 'this'
+    if (window.isScoreSavedForThisRun) return;
+    window.isScoreSavedForThisRun = true;
+
+    // Explicitly stop breathing sound on death
+    soundManager.stopBreathing();
+
     const leaderboardHTML = await showLeaderboard(score); // false = save score
+
     console.log('Leaderboard HTML generated, length:', leaderboardHTML.length);
     instructions.innerHTML = leaderboardHTML;
 });
@@ -477,6 +606,7 @@ document.addEventListener('click', () => {
 player.controls.addEventListener('lock', () => {
     console.log('Pointer locked');
     instructionsEl.style.display = 'none';
+    window.isGamePaused = false;
 });
 
 player.controls.addEventListener('unlock', () => {
@@ -489,6 +619,9 @@ player.controls.addEventListener('unlock', () => {
         // For now, let's just keep it simple, maybe show "Click to Resume"
         instructionsEl.style.display = 'block';
         instructionsEl.innerHTML = '<h1>PAUSED</h1><p>Click to Resume</p>';
+
+        // Stop breathing sound when paused
+        soundManager.stopBreathing();
     }
 });
 
@@ -568,15 +701,18 @@ function spawnBoss() {
 
         // Check against trees
         let tooCloseToTree = false;
-        for (const treePos of treePositions) {
-            const d = Math.hypot(x - treePos.x, z - treePos.z);
-            if (d < 3) { tooCloseToTree = true; break; }
+        // Check gameMap.treePositions if available
+        if (gameMap.treePositions) {
+            for (const treePos of gameMap.treePositions) {
+                const d = Math.hypot(x - treePos.x, z - treePos.z);
+                if (d < 3) { tooCloseToTree = true; break; }
+            }
         }
         if (tooCloseToTree) { attempts++; continue; }
 
         // Check walls
         let valid = true;
-        for (const wall of walls) {
+        for (const wall of gameMap.walls) {
             if (new THREE.Vector3(x, 0, z).distanceTo(wall.position) < 3) { valid = false; break; }
         }
         if (valid) { spawnPos = new THREE.Vector3(x, 0, z); break; }
@@ -617,15 +753,18 @@ setInterval(() => {
 
             // Check against trees
             let tooCloseToTree = false;
-            for (const treePos of treePositions) {
-                const d = Math.hypot(x - treePos.x, z - treePos.z);
-                if (d < 2) { tooCloseToTree = true; break; }
+            // Check gameMap.treePositions if available
+            if (gameMap.treePositions) {
+                for (const treePos of gameMap.treePositions) {
+                    const d = Math.hypot(x - treePos.x, z - treePos.z);
+                    if (d < 2) { tooCloseToTree = true; break; }
+                }
             }
             if (tooCloseToTree) { attempts++; continue; }
 
             // Simple wall check (existing logic)
             let valid = true;
-            for (const wall of walls) {
+            for (const wall of gameMap.walls) {
                 if (new THREE.Vector3(x, 0, z).distanceTo(wall.position) < 2) { valid = false; break; }
             }
             if (valid) { spawnPos = new THREE.Vector3(x, 0, z); break; }
@@ -648,12 +787,85 @@ function animate() {
     const delta = (time - lastTime) / 1000;
     lastTime = time;
 
-    if (gameStarted && (player.controls.isLocked || isMobile)) {
-        player.update(delta, walls); // Pass walls for collision
+    // WASD Fix: Ensure update runs if gameStarted.
+    // We remove the strict isLocked check here to allow movement even if lock is technically lost 
+    // (e.g. persistent overlay focus issue), as long as gameStarted is true.
+    // player.update() has its own isDead check.
+    // Pause Logic
+    // Desktop: Pause if pointer is unlocked (and not dead)
+    // Mobile: Pause if window.isGamePaused is set
+    const isPaused = (!isMobile && !player.controls.isLocked) || (isMobile && window.isGamePaused);
+
+    if (gameStarted && !player.isDead && !isPaused) { // Added pause check
+        player.update(delta, gameMap.walls); // Pass walls for collision
+
+        // Enemy Collision (Player vs Enemy)
+        // Prevent player from walking through enemies
+        const playerPos = player.dummyCamera.position;
+        const playerRadius = 1.0;
+        const enemyRadius = 1.0;
+
+        for (const enemy of enemies) {
+            if (enemy.isDead) continue;
+
+            const dx = playerPos.x - enemy.mesh.position.x;
+            const dz = playerPos.z - enemy.mesh.position.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            const minDist = playerRadius + enemyRadius;
+
+            if (dist < minDist) {
+                // Formatting collision - Push player back
+                const angle = Math.atan2(dz, dx);
+                const pushX = Math.cos(angle) * (minDist - dist);
+                const pushZ = Math.sin(angle) * (minDist - dist);
+
+                playerPos.x += pushX;
+                playerPos.z += pushZ;
+
+                // Also stop velocity in that direction?
+                // Simple position correction is often enough for this
+            }
+        }
+
+        // Low Health Audio
+        // Only run this if player is ALIVE. If dead, we handle stop in playerDied.
+        if (!player.isDead) {
+            if (player.health < 25) {
+                soundManager.playBreathing();
+            } else {
+                soundManager.stopBreathing();
+            }
+        }
 
         // Check for touch shooting
         if (player.touchControls.shouldShoot) {
             player.shoot(bullets);
+        }
+
+        // Update Cars / Civilians
+        if (gameMap) {
+            gameMap.update(delta, player, enemies);
+        }
+
+        // Car Collision (Player vs Car)
+        if (gameMap.cars) {
+            const pPos = player.dummyCamera.position;
+            const pRadius = 1.0;
+            const cRadius = 2.5; // Approx for car size
+
+            for (const car of gameMap.cars) {
+                const dx = pPos.x - car.mesh.position.x;
+                const dz = pPos.z - car.mesh.position.z;
+                const dist = Math.hypot(dx, dz);
+
+                if (dist < pRadius + cRadius) {
+                    // Push Player Back
+                    const angle = Math.atan2(dz, dx);
+                    const pushDist = (pRadius + cRadius) - dist;
+                    pPos.x += Math.cos(angle) * pushDist;
+                    pPos.z += Math.sin(angle) * pushDist;
+                }
+            }
         }
 
         // Update Potions
@@ -713,11 +925,38 @@ function animate() {
                 continue;
             }
 
+            // Check Civilians (in City)
+            if (gameMap && gameMap.civilians && gameMap.civilians.length > 0) {
+                for (let c = 0; c < gameMap.civilians.length; c++) {
+                    const civ = gameMap.civilians[c];
+                    // Simple distance check for bullet hit
+                    const dist = bullet.position.distanceTo(civ.mesh.position);
+                    if (dist < 1.5) { // Hit civilian
+
+                        // Penalty
+                        score = Math.max(0, score - 30);
+                        updateHUD(); // Assuming updateHUD exists to refresh score display
+                        showMessage("-30 (Civilian Casualty!)", 2000, "red", '24px'); // Added duration and size for consistency
+
+                        // Remove civilian
+                        civ.remove(); // Assuming civilian has a remove method
+
+                        gameMap.civilians.splice(c, 1);
+
+                        // Remove bullet
+                        bullet.remove();
+                        bullets.splice(i, 1);
+                        i--; // Decrement i because an element was removed
+                        break; // Bullet handled, move to next bullet
+                    }
+                }
+            }
+
             // Check collisions
             let closestHit = null;
 
             // 0. Bullet vs Walls
-            for (const wall of walls) {
+            for (const wall of gameMap.walls) {
                 const intersection = bullet.checkCollision(wall);
                 if (intersection) {
                     if (!closestHit || intersection.distance < closestHit.distance) {
@@ -858,7 +1097,7 @@ function animate() {
 
         // Update Enemies
         for (let i = enemies.length - 1; i >= 0; i--) {
-            enemies[i].update(delta, player.position, bullets, walls);
+            enemies[i].update(delta, player.position, bullets, gameMap.walls);
 
             // Clean up enemies that have finished their death animation (isDead = true after 3 seconds)
             if (enemies[i].isDead) {
@@ -874,7 +1113,14 @@ function animate() {
 
     renderer.render(scene, camera);
 }
-
+// Resume handler for mobile (click on instructions overlay)
+instructionsEl.addEventListener('click', () => {
+    if (isMobile && window.isGamePaused) {
+        window.isGamePaused = false;
+        instructionsEl.style.display = 'none';
+        if (btnPause) btnPause.innerText = '⏸️';
+    }
+});
 // Initialize Vercel Analytics
 inject();
 

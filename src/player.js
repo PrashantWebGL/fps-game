@@ -266,6 +266,17 @@ export class Player {
         // Apply Velocity & Collision (Separate Axes)
         const oldPos = this.dummyCamera.position.clone();
 
+        // 0. Anti-Stuck Check (Start of frame)
+        // If we are already colliding (e.g. from bad spawn or glitch), push UP until free
+        // This is a "safety eject" feature
+        if (this.checkWallCollision(walls)) {
+            // Try pushing up by 0.5 until free, max 20 times (10 units)
+            for (let i = 0; i < 20; i++) {
+                this.dummyCamera.position.y += 0.5;
+                if (!this.checkWallCollision(walls)) break;
+            }
+        }
+
         // 1. Move X
         this.dummyCamera.position.x += this.velocity.x * delta;
         if (this.checkWallCollision(walls)) {
@@ -283,46 +294,33 @@ export class Player {
         // 3. Move Y
         this.dummyCamera.position.y += this.velocity.y * delta;
 
-        // Vertical Collision (Landing on walls)
-        if (this.velocity.y < 0) { // Only check when falling
-            const feetY = this.dummyCamera.position.y - 2.0;
+        // Vertical Collision
+        // We reuse checkWallCollision but we need to know what we hit to snap to it
+        // The current checkWallCollision just returns boolean.
+        // Let's modify checkWallCollision to return the wall (or null)
 
-            // Check if we are intersecting a wall *below* us
-            // We can reuse checkWallCollision but we need to know *which* wall and its height.
+        const hitWall = this.checkWallCollision(walls, true); // true = return object
+        if (hitWall) {
+            // Revert Y
+            // But we want to snap to top if falling
+            if (this.velocity.y < 0) {
+                // Falling -> Land
+                // Snap to wall top
+                const wallBox = new THREE.Box3().setFromObject(hitWall);
+                this.dummyCamera.position.y = wallBox.max.y + 2.0;
+                this.velocity.y = 0;
+                this.canJump = true;
 
-            // Let's do a specific check for landing
-            this.hitbox.position.copy(this.dummyCamera.position);
-            this.hitbox.position.y -= 1;
-            const playerBox = new THREE.Box3().setFromObject(this.hitbox);
-
-            for (const wall of walls) {
-                const wallBox = new THREE.Box3().setFromObject(wall);
-                // Check if we are horizontally within the wall's bounds
-                // We can check intersection of the projected boxes on XZ plane
-                const playerRect = { minX: playerBox.min.x, maxX: playerBox.max.x, minZ: playerBox.min.z, maxZ: playerBox.max.z };
-                const wallRect = { minX: wallBox.min.x, maxX: wallBox.max.x, minZ: wallBox.min.z, maxZ: wallBox.max.z };
-
-                const overlapX = playerRect.minX < wallRect.maxX && playerRect.maxX > wallRect.minX;
-                const overlapZ = playerRect.minZ < wallRect.maxZ && playerRect.maxZ > wallRect.minZ;
-
-                if (overlapX && overlapZ) {
-                    // We are above/inside this wall column.
-                    // Check vertical relationship.
-                    // If feet are close to wall top and we are falling...
-                    if (feetY >= wallBox.max.y - 0.5 && feetY <= wallBox.max.y + 0.5) {
-                        // Landed!
-                        this.velocity.y = 0;
-                        this.dummyCamera.position.y = wallBox.max.y + 2.0;
-                        this.canJump = true;
-
-                        // Footstep Audio (Land)
-                        if (this.velocity.y < -5) this.soundManager.playFootstep(); // Hard landing
-                    }
-                }
+                // Audio
+                if (this.velocity.y < -5) this.soundManager.playFootstep();
+            } else {
+                // Jumping -> Hit Head
+                this.dummyCamera.position.y = oldPos.y;
+                this.velocity.y = 0;
             }
         }
 
-        // Floor collision
+        // Floor collision (Global floor)
         if (this.dummyCamera.position.y < 2) {
             this.velocity.y = 0;
             this.dummyCamera.position.y = 2;
@@ -350,15 +348,14 @@ export class Player {
 
         // Update Real Camera Position
         if (this.isThirdPerson) {
-            // Over-the-shoulder view: offset to the right and back (increased distance)
-            // This allows the crosshair to align better with where bullets go
-            const offset = new THREE.Vector3(2.5, 1.8, 8); // Right, Up, Back (increased right from 1.2 to 2.5)
+            // Over-the-shoulder view
+            const offset = new THREE.Vector3(2.5, 1.8, 8);
             offset.applyQuaternion(this.dummyCamera.quaternion);
             this.camera.position.copy(this.dummyCamera.position).add(offset);
 
-            // Look further ahead of the player for better aiming
+            // Look further ahead
             const lookTarget = this.dummyCamera.position.clone();
-            const forward = new THREE.Vector3(0, 0, -6); // Look further ahead (increased from -3 to -6)
+            const forward = new THREE.Vector3(0, 0, -6);
             forward.applyQuaternion(this.dummyCamera.quaternion);
             lookTarget.add(forward);
             this.camera.lookAt(lookTarget);
@@ -372,7 +369,7 @@ export class Player {
         this.weapon.update(delta);
     }
 
-    checkWallCollision(walls) {
+    checkWallCollision(walls, returnObject = false) {
         // Update hitbox to current camera position for check
         this.hitbox.position.copy(this.dummyCamera.position);
         this.hitbox.position.y -= 1;
@@ -388,13 +385,33 @@ export class Player {
             const wallBox = new THREE.Box3().setFromObject(wall);
 
             // Ignore walls that are short enough to step on (if we are above them)
-            // If our feet are above the wall top, it's not a collision, it's a floor (handled in update)
-            if (feetY >= wallBox.max.y - 0.1) continue;
+            // But if we are falling into them (Y check), we want to detect them
+            // So we only ignore if feet are CLEARLY above (+ buffer) AND we are not falling into it?
+            // Actually, for pure X/Z checks, we want to ignore things we are walking ON.
+            // If feetY >= wallTop - epsilon, then we are on top.
+
+            // NOTE: During Y-check, we want to catch this.
+            // During X/Z check, we want to ignore this.
+
+            // Re-introducing logic: 
+            // Collision is valid if:
+            // 1. Boxes intersect
+            // 2. We are not "safely above" it (walking on it)
+
+            // If we are strictly above, IntersectBox should be false?
+            // Box3.intersectsBox checks all dimensions. If Y doesn't overlap, it returns false.
+            // So if we are standing ON a wall, playerBox.min.y >= wallBox.max.y. No intersection.
+            // So IntersectsBox handles it?
+
+            // However, floating point errors.
+            // Also, player moves Y separately.
 
             if (playerBox.intersectsBox(wallBox)) {
+                if (returnObject) return wall;
                 return true;
             }
         }
+        if (returnObject) return null;
         return false;
     }
 

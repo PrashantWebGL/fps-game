@@ -73,8 +73,15 @@ export class Enemy {
         if (distance > 10) {
             const direction = new THREE.Vector3().subVectors(playerPosition, this.mesh.position).normalize();
             direction.y = 0; // Keep on ground
-            this.mesh.position.add(direction.multiplyScalar(this.speed * delta));
+
+            // Candidate Position
+            const moveVec = direction.multiplyScalar(this.speed * delta);
+            const candidatePos = this.mesh.position.clone().add(moveVec);
+
+            // Move (No Wall Collision as requested)
+            this.mesh.position.add(moveVec);
             isMoving = true;
+
 
             // Footsteps
             this.distanceTraveled += this.speed * delta;
