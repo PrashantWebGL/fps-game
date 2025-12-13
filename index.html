@@ -199,34 +199,70 @@
     @media (max-width: 768px) {
       #hud-top-right {
         top: 60px;
-        /* Move down below controls */
         right: 10px;
-        min-width: 180px;
-        /* Smaller width */
-        width: auto;
-        transform: scale(0.85);
-        /* Slightly scale down overall */
-        transform-origin: top right;
+        width: 220px;
+        /* Fixed small width */
+        min-width: 0;
+        transform: none;
+        /* Reset transform, manage content instead */
       }
 
       .hud-container {
-        padding: 10px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px;
+        padding: 8px !important;
+      }
+
+      /* Hide Player Name (1st child) */
+      .hud-container>div:nth-child(1) {
+        display: none !important;
+      }
+
+      /* Health Row (2nd child) */
+      .hud-container>div:nth-child(2) {
+        grid-column: 1;
+        border: none !important;
+        padding: 0 !important;
+      }
+
+      /* Health Bar (3rd child) */
+      .hud-container>div:nth-child(3) {
+        grid-column: 1 / -1;
+        /* Spans full width */
+        margin-top: 2px !important;
+        height: 4px !important;
+      }
+
+      /* Score Row (4th child) */
+      .hud-container>div:nth-child(4) {
+        grid-column: 2;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        justify-content: flex-end;
+      }
+
+      /* Hide Leaderboard Button (5th child) */
+      .hud-container>div:nth-child(5) {
+        display: none !important;
       }
 
       .hud-value {
-        font-size: 20px;
-        /* Smaller text */
+        font-size: 18px !important;
       }
 
       .hud-label {
-        font-size: 9px;
+        display: none;
       }
 
+      /* Hide labels to save even more space, just icons */
       .hud-icon {
-        font-size: 16px;
+        font-size: 16px !important;
+        margin-right: 5px !important;
       }
 
-      /* Also adjust instructions/menu for small screens */
+      /* Adjust instructions */
       #instructions h1 {
         font-size: 24px !important;
       }
@@ -284,20 +320,20 @@
         </div> -->
 
         <!-- Leaderboard Button -->
-        <div class="hud-row"
+        <!-- <div class="hud-row"
           style="margin-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 15px; justify-content: center;">
           <button id="btn-show-leaderboard"
             style="width: 100%; padding: 10px; font-size: 14px; font-weight: bold; cursor: pointer; background: rgba(255, 215, 0, 0.2); color: #ffd700; border: 1px solid #ffd700; border-radius: 6px; box-shadow: 0 0 10px rgba(255, 215, 0, 0.1); transition: all 0.2s; pointer-events: auto; font-family: 'Courier New', monospace;">
             🏆 VIEW RANKS
           </button>
-        </div>
+        </div> -->
       </div>
     </div>
   </div>
   <div id="crosshair"></div>
   <div id="mobile-controls-top" style="display:none; position:absolute; top:10px; left:10px; z-index:1000; gap:10px;">
     <button id="btn-fullscreen"
-      style="font-size:24px; background:rgba(0,0,0,0.5); border:1px solid white; color:white; border-radius:5px; padding:5px 10px;">Ev</button>
+      style="font-size:24px; background:rgba(0,0,0,0.5); border:1px solid white; color:white; border-radius:5px; padding:5px 10px;">⛶</button>
     <button id="btn-pause"
       style="font-size:24px; background:rgba(0,0,0,0.5); border:1px solid white; color:white; border-radius:5px; padding:5px 10px;">⏸️</button>
   </div>
