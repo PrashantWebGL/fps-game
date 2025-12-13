@@ -348,6 +348,7 @@ const btnPause = document.getElementById('btn-pause');
 const mobileControlsTop = document.getElementById('mobile-controls-top');
 
 if (isMobile) {
+    document.body.classList.add('mobile-mode');
     if (mobileControlsTop) mobileControlsTop.style.display = 'flex';
 
     if (btnFullscreen) {

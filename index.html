@@ -195,83 +195,73 @@
       color: white;
     }
 
-    /* Responsive HUD for Mobile */
-    @media (max-width: 768px) {
-      #hud-top-right {
-        top: 60px;
-        right: 10px;
-        width: 220px;
-        /* Fixed small width */
-        min-width: 0;
-        transform: none;
-        /* Reset transform, manage content instead */
-      }
+    /* Responsive HUD for Mobile (Class-based) */
+    body.mobile-mode #hud-top-right {
+      top: 60px;
+      right: 10px;
+      width: 220px;
+      min-width: 0;
+      transform: none;
+    }
 
-      .hud-container {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 5px;
-        padding: 8px !important;
-      }
+    body.mobile-mode .hud-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+      padding: 8px !important;
+    }
 
-      /* Hide Player Name (1st child) */
-      .hud-container>div:nth-child(1) {
-        display: none !important;
-      }
+    body.mobile-mode .hud-container>div:nth-child(1) {
+      display: none !important;
+    }
 
-      /* Health Row (2nd child) */
-      .hud-container>div:nth-child(2) {
-        grid-column: 1;
-        border: none !important;
-        padding: 0 !important;
-      }
+    /* Name */
 
-      /* Health Bar (3rd child) */
-      .hud-container>div:nth-child(3) {
-        grid-column: 1 / -1;
-        /* Spans full width */
-        margin-top: 2px !important;
-        height: 4px !important;
-      }
+    body.mobile-mode .hud-container>div:nth-child(2) {
+      grid-column: 1;
+      border: none !important;
+      padding: 0 !important;
+    }
 
-      /* Score Row (4th child) */
-      .hud-container>div:nth-child(4) {
-        grid-column: 2;
-        border: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        justify-content: flex-end;
-      }
+    body.mobile-mode .hud-container>div:nth-child(3) {
+      grid-column: 1 / -1;
+      margin-top: 2px !important;
+      height: 4px !important;
+    }
 
-      /* Hide Leaderboard Button (5th child) */
-      .hud-container>div:nth-child(5) {
-        display: none !important;
-      }
+    body.mobile-mode .hud-container>div:nth-child(4) {
+      grid-column: 2;
+      border: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      justify-content: flex-end;
+    }
 
-      .hud-value {
-        font-size: 18px !important;
-      }
+    body.mobile-mode .hud-container>div:nth-child(5) {
+      display: none !important;
+    }
 
-      .hud-label {
-        display: none;
-      }
+    body.mobile-mode .hud-value {
+      font-size: 18px !important;
+    }
 
-      /* Hide labels to save even more space, just icons */
-      .hud-icon {
-        font-size: 16px !important;
-        margin-right: 5px !important;
-      }
+    body.mobile-mode .hud-label {
+      display: none;
+    }
 
-      /* Adjust instructions */
-      #instructions h1 {
-        font-size: 24px !important;
-      }
+    body.mobile-mode .hud-icon {
+      font-size: 16px !important;
+      margin-right: 5px !important;
+    }
 
-      #player-name {
-        width: 180px !important;
-        font-size: 16px !important;
-        padding: 10px !important;
-      }
+    body.mobile-mode #instructions h1 {
+      font-size: 24px !important;
+    }
+
+    body.mobile-mode #player-name {
+      width: 180px !important;
+      font-size: 16px !important;
+      padding: 10px !important;
     }
   </style>
 </head>
