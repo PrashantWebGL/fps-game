@@ -90,15 +90,15 @@ export class Player {
                     if (this.canJump === true) this.velocity.y += 15; // Jump force
                     this.canJump = false;
                     break;
-                case 'Digit3':
-                    this.isThirdPerson = !this.isThirdPerson;
-                    this.playerModel.visible = this.isThirdPerson;
-                    // Hide weapon in 3rd person? Or keep it?
-                    // Weapon is attached to camera, so it will float back with camera.
-                    // Ideally we should attach weapon to player model in 3rd person.
-                    // For now, let's just hide the FPS weapon in 3rd person.
-                    this.weapon.mesh.visible = !this.isThirdPerson;
-                    break;
+                // case 'Digit3':
+                //     this.isThirdPerson = !this.isThirdPerson;
+                //     this.playerModel.visible = this.isThirdPerson;
+                //     // Hide weapon in 3rd person? Or keep it?
+                //     // Weapon is attached to camera, so it will float back with camera.
+                //     // Ideally we should attach weapon to player model in 3rd person.
+                //     // For now, let's just hide the FPS weapon in 3rd person.
+                //     this.weapon.mesh.visible = !this.isThirdPerson;
+                //     break;
             }
         };
 

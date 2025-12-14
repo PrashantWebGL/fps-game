@@ -77,8 +77,8 @@ export class HealthPotion {
         const distanceSq = dx * dx + dz * dz;
         const dy = Math.abs(this.mesh.position.y - playerPosition.y);
 
-        // Check horizontal distance < 0.8 and vertical distance < 3
-        return distanceSq < (0.8 * 0.8) && dy < 3;
+        // Check horizontal distance < 2.0 and vertical distance < 3
+        return distanceSq < (2.0 * 2.0) && dy < 3;
     }
 
     collect() {
