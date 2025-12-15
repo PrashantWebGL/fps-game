@@ -29,7 +29,9 @@ export class Player {
         this.velocity = new THREE.Vector3();
         this.direction = new THREE.Vector3();
         this.speed = 10;
-        this.jumpVelocity = 8;
+        this.speed = 10;
+        this.jumpVelocity = 15; // Set base variable to 15 just in case
+        this.gravity = -20;
         this.gravity = -20;
         this.isOnGround = false;
 
@@ -137,7 +139,7 @@ export class Player {
 
         // Jump
         if (this.touchControls.shouldJump && this.canJump) {
-            this.velocity.y = this.jumpVelocity;
+            this.velocity.y = 15; // Increased to 15 to match desktop jump power
             this.canJump = false;
             this.touchControls.shouldJump = false; // Reset jump flag
         }
@@ -299,7 +301,7 @@ export class Player {
         // The current checkWallCollision just returns boolean.
         // Let's modify checkWallCollision to return the wall (or null)
 
-        const hitWall = this.checkWallCollision(walls, true); // true = return object
+        const hitWall = this.checkWallCollision(walls, true, true); // returnObject=true, isVertical=true
         if (hitWall) {
             // Revert Y
             // But we want to snap to top if falling
@@ -369,7 +371,7 @@ export class Player {
         this.weapon.update(delta);
     }
 
-    checkWallCollision(walls, returnObject = false) {
+    checkWallCollision(walls, returnObject = false, isVertical = false) {
         // Update hitbox to current camera position for check
         this.hitbox.position.copy(this.dummyCamera.position);
         this.hitbox.position.y -= 1;
@@ -387,8 +389,10 @@ export class Player {
             // Ignore walls that are short enough to step on (if we are above them)
             // But if we are falling into them (Y check), we want to detect them
             // So we only ignore if feet are CLEARLY above (+ buffer) AND we are not falling into it?
-            // Actually, for pure X/Z checks, we want to ignore things we are walking ON.
-            // If feetY >= wallTop - epsilon, then we are on top.
+            // Ignore walls that are short enough to step on (if we are above them)
+            // If our feet are above the wall top, it's not a collision, it's a floor (handled in update)
+            // ONLY if this is NOT a vertical check. If checking vertical, we want to hit the floor!
+            if (!isVertical && feetY >= wallBox.max.y - 0.2) continue; // Increased tolerance to prevents shake when standing on walln we are on top.
 
             // NOTE: During Y-check, we want to catch this.
             // During X/Z check, we want to ignore this.
