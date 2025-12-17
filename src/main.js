@@ -80,6 +80,11 @@ let bossSpawned = false; // Track if boss is currently active
 let totalKills = 0; // Track total kills for boss spawn
 let killsSinceBoss = 0; // Track kills since last boss spawn
 
+// Mobile auto-fire
+let mobileAutoFireTimer = 0;
+const mobileAutoFireInterval = 0.1; // 100ms = 0.1 seconds
+let isAimingAtEnemy = false;
+
 const scoreEl = document.getElementById('score-value');
 const instructionsEl = document.getElementById('instructions');
 
@@ -347,42 +352,77 @@ const btnFullscreen = document.getElementById('btn-fullscreen');
 const btnPause = document.getElementById('btn-pause');
 const mobileControlsTop = document.getElementById('mobile-controls-top');
 
-if (isMobile) {
-    document.body.classList.add('mobile-mode');
-    if (mobileControlsTop) mobileControlsTop.style.display = 'flex';
+// Enable controls for everyone (hidden initially)
+if (mobileControlsTop) mobileControlsTop.style.display = 'none';
 
-    if (btnFullscreen) {
-        btnFullscreen.addEventListener('click', () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(err => {
-                    console.log(`Error attempting to enable fullscreen: ${err.message}`);
-                });
-            } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                }
+// Event Listeners for Buttons (Desktop & Mobile)
+if (btnFullscreen) {
+    btnFullscreen.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.log(`Error attempting to enable fullscreen: ${err.message}`);
+            });
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
             }
-        });
-    }
+        }
+    });
+}
 
-    if (btnPause) {
-        btnPause.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (window.isGamePaused) {
-                // Resume
+if (btnPause) {
+    btnPause.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.isGamePaused) {
+            // Resume
+            window.isGamePaused = false;
+            instructionsEl.style.display = 'none';
+            btnPause.innerText = '⏸️';
+            // Lock pointer again if desktop
+            if (!isMobile) {
+                player.controls.lock();
+            }
+        } else {
+            // Pause
+            window.isGamePaused = true;
+            if (!isMobile) player.controls.unlock();
+            instructionsEl.style.display = 'block';
+
+            // Enhanced Pause Menu
+            instructionsEl.innerHTML = `
+                <h1 style="color:white; margin:0 0 20px 0;">PAUSED</h1>
+                <div style="display:flex; flex-direction:column; gap:15px; align-items:center;">
+                    <button id="btn-continue" style="padding:15px 40px; font-size:20px; font-weight:bold; cursor:pointer; background:#00ff00; color:black; border:none; border-radius:8px;">
+                        CONTINUE
+                    </button>
+                    <button id="btn-surrender" style="padding:15px 40px; font-size:20px; font-weight:bold; cursor:pointer; background:#ff0000; color:white; border:none; border-radius:8px;">
+                        🏳️ SURRENDER
+                    </button>
+                </div>
+            `;
+
+            // Add event listeners to new buttons
+            document.getElementById('btn-continue').addEventListener('click', () => {
                 window.isGamePaused = false;
                 instructionsEl.style.display = 'none';
                 btnPause.innerText = '⏸️';
-            } else {
-                // Pause
-                window.isGamePaused = true;
-                instructionsEl.style.display = 'block';
-                instructionsEl.innerHTML = '<h1>PAUSED</h1><p>Tap to Resume</p>';
-                soundManager.stopBreathing();
-                btnPause.innerText = '▶️';
-            }
-        });
-    }
+                if (!isMobile) player.controls.lock();
+            });
+
+            document.getElementById('btn-surrender').addEventListener('click', async () => {
+                player.isDead = true;
+                player.setFinalScore(score);
+                window.dispatchEvent(new CustomEvent('playerDied'));
+            });
+
+            soundManager.stopBreathing();
+            btnPause.innerText = '▶️';
+        }
+    });
+}
+
+if (isMobile) {
+    document.body.classList.add('mobile-mode');
 }
 
 
@@ -428,6 +468,11 @@ function startGame(difficulty) {
 
     // Update HUD Name
     document.getElementById('hud-player-name').textContent = playerName.toUpperCase();
+
+    // Show mobile controls on start (NOW FOR ALL PLATFORMS)
+    if (mobileControlsTop) {
+        mobileControlsTop.style.display = 'flex';
+    }
 }
 
 // Map Selection State
@@ -520,6 +565,7 @@ if (btnShowLeaderboard) {
         lbOverlay.innerHTML = html;
 
         // Ensure the close button in the HTML calls window.closeLeaderboard()
+        if (mobileControlsTop) mobileControlsTop.style.display = 'none';
     });
 }
 
@@ -577,6 +623,9 @@ window.addEventListener('playerDied', async (event) => {
     instructions.style.display = 'block';
     instructions.style.visibility = 'visible';
     instructions.style.opacity = '1';
+
+    // Hide controls
+    if (mobileControlsTop) mobileControlsTop.style.display = 'none';
 
     // Fix: Use global/closure variable instead of 'this'
     if (window.isScoreSavedForThisRun) return;
@@ -807,7 +856,7 @@ function animate() {
         const enemyRadius = 1.0;
 
         for (const enemy of enemies) {
-            if (enemy.isDead) continue;
+            if (enemy.isDead || enemy.isBroken) continue;
 
             const dx = playerPos.x - enemy.mesh.position.x;
             const dz = playerPos.z - enemy.mesh.position.z;
@@ -1110,10 +1159,51 @@ function animate() {
 
         // Update Particles
         particles.update(delta);
+
+        // Crosshair Targeting Logic
+        const crosshair = document.getElementById('crosshair');
+        if (crosshair) {
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            let pointingAtEnemy = false;
+
+            // Check intersection with all enemies
+            for (const enemy of enemies) {
+                if (enemy.isDead || enemy.isBroken) continue;
+                // Raycast against the enemy mesh
+                const intersects = raycaster.intersectObject(enemy.mesh, true);
+                if (intersects.length > 0) {
+                    // Check if it's the closest thing (or close enough)
+                    // We could check walls too to see if enemy is behind wall, but simple check is okay for UI feedback
+                    pointingAtEnemy = true;
+                    break;
+                }
+            }
+
+            if (pointingAtEnemy) {
+                crosshair.classList.add('enemy-target');
+                isAimingAtEnemy = true;
+            } else {
+                crosshair.classList.remove('enemy-target');
+                isAimingAtEnemy = false;
+            }
+        }
+
+        // Mobile Auto-Fire: shoot automatically when aiming at enemy
+        if (isMobile && isAimingAtEnemy && !player.isDead) {
+            mobileAutoFireTimer += delta;
+            if (mobileAutoFireTimer >= mobileAutoFireInterval) {
+                player.shoot(bullets);
+                mobileAutoFireTimer = 0;
+            }
+        } else {
+            mobileAutoFireTimer = 0; // Reset timer when not aiming
+        }
     }
 
     renderer.render(scene, camera);
 }
+
 // Resume handler for mobile (click on instructions overlay)
 instructionsEl.addEventListener('click', () => {
     if (isMobile && window.isGamePaused) {
@@ -1122,6 +1212,7 @@ instructionsEl.addEventListener('click', () => {
         if (btnPause) btnPause.innerText = '⏸️';
     }
 });
+
 // Initialize Vercel Analytics
 inject();
 

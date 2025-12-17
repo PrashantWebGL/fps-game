@@ -13,7 +13,7 @@ export class HouseMap {
         HouseMap.createWalls(gameMap);
         HouseMap.createHouse(gameMap, 30, -30);
         HouseMap.createCemetery(gameMap, -30, 30);
-        gameMap.createCityBoundary(50, 10); // Size 50, Height 10 (Twice/Triple player size, impossible to cross)
+        gameMap.createCityBoundary(50, 10, '/assets/textures/housefence.jpg'); // Size 50, Height 10, Fence Texture
     }
 
     static createBoundary(gameMap) {

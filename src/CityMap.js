@@ -27,7 +27,7 @@ export class CityMap {
         CityMap.createBuildings(gameMap, gridSize, streetWidth, blockSize, buildingTextures);
         CityMap.createCars(gameMap, gridSize);
         CityMap.createCivilians(gameMap, gridSize, 15);
-        gameMap.createCityBoundary(gridSize, 10);
+        gameMap.createCityBoundary(gridSize, 10, '/assets/textures/cityouterwall.jpg');
     }
 
     static createRoads(gameMap, gridSize, streetWidth, blockSize) {

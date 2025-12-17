@@ -144,6 +144,13 @@
       position: absolute;
       background: #00ff00;
       box-shadow: 0 0 8px rgba(0, 255, 0, 0.9), 0 0 3px rgba(0, 255, 0, 0.5);
+      transition: background 0.1s, box-shadow 0.1s;
+    }
+
+    #crosshair.enemy-target::before,
+    #crosshair.enemy-target::after {
+      background: #ff0000;
+      box-shadow: 0 0 10px rgba(255, 0, 0, 1), 0 0 5px rgba(255, 0, 0, 0.8);
     }
 
     #crosshair::before {

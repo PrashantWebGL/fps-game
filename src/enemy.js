@@ -38,6 +38,10 @@ export class Enemy {
         this.rightLeg = parts.rightLeg;
         this.gun = parts.gun;
 
+        // Recoil
+        this.baseRightArmRotX = -Math.PI / 2; // Starting aim position
+        this.recoilOffset = 0;
+
         this.shootTimer = 0;
         this.shootInterval = 2.0;
         this.walkCycle = 0;
@@ -105,13 +109,30 @@ export class Enemy {
             this.leftArm.rotation.x = Math.sin(this.walkCycle + Math.PI) * 0.5;
             this.rightArm.rotation.x = Math.sin(this.walkCycle) * 0.5;
             // Keep gun pointing somewhat forward even while swinging
-            this.rightArm.rotation.x = Math.max(this.rightArm.rotation.x, -0.2);
+            // Recoil Logic: lerp recoilOffset back to 0
+            this.recoilOffset = this.recoilOffset + (0 - this.recoilOffset) * (delta * 10);
+
+            // Apply base rotation + swing + recoil
+            // When stopped (else block), we set it to baseRightArmRotX (-PI/2).
+            // Here we are moving, but we want the gun to mostly point forward.
+            // Let's rely on the update loop for 'isMoving' to set legs/arms, but apply recoil on top.
+            // Actually, simplified: always point gun at player, but add recoil kick.
+
+            // BUT existing logic separates Moving vs Stopped arm rotation.
+            // Let's modify:
+            const swing = Math.sin(this.walkCycle) * 0.5;
+            this.rightArm.rotation.x = Math.max(swing, -0.2);
+            // The above line in original code forces arm forward-ish while running.
+            // Let's add recoil to it? 
+            // If running, they might not be aiming perfectly.
+            this.rightArm.rotation.x -= this.recoilOffset;
+
         } else {
             // Reset Pose
             this.leftLeg.rotation.x = 0;
             this.rightLeg.rotation.x = 0;
             this.leftArm.rotation.x = 0;
-            this.rightArm.rotation.x = -Math.PI / 2; // Point gun at player when stopped
+            this.rightArm.rotation.x = this.baseRightArmRotX - this.recoilOffset; // Point gun at player when stopped + Recoil
         }
 
         // Jump & Dodge Logic
@@ -197,6 +218,10 @@ export class Enemy {
         const distance = this.mesh.position.distanceTo(targetPos);
         const vol = Math.max(0, 1 - distance / 50);
         if (vol > 0.01) this.soundManager.playGunshot(true);
+
+        // Apply Recoil
+        this.recoilOffset = 0.5; // Kick back (up)
+
     }
 
     takeDamage(amount, bulletVelocity, partName) {

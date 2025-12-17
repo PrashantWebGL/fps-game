@@ -89,6 +89,7 @@ export class Player {
                     this.moveRight = true;
                     break;
                 case 'Space':
+                    event.preventDefault(); // Prevent scrolling or button actuation
                     if (this.canJump === true) this.velocity.y += 15; // Jump force
                     this.canJump = false;
                     break;

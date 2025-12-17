@@ -105,16 +105,33 @@ export class GameMap {
         this.treePositions.push(new THREE.Vector3(x, 0, z)); // Track position
     }
 
-    createCityBoundary(gridSize, height = 50) {
+    createCityBoundary(gridSize, height = 50, textureUrl = null) {
         // Create large invisible-ish walls at the edges
         const limit = gridSize + 10; // e.g. 110
         // const height = 50; // Removed, using param
         const thickness = 5;
 
-        const boundaryMat = new THREE.MeshStandardMaterial({
-            color: 0x111111,
-            transparent: false,
-        });
+        let boundaryMat;
+        if (textureUrl) {
+            const textureLoader = new THREE.TextureLoader();
+            const texture = textureLoader.load(textureUrl);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+
+            // Adjust repeat based on wall size (approximate)
+            // Width is limit * 2.2, Height is height
+            texture.repeat.set((limit * 2.2) / 10, height / 10);
+
+            boundaryMat = new THREE.MeshStandardMaterial({
+                map: texture,
+                side: THREE.DoubleSide
+            });
+        } else {
+            boundaryMat = new THREE.MeshStandardMaterial({
+                color: 0x111111,
+                transparent: false,
+            });
+        }
 
         const walls = [
             { pos: [0, height / 2, -limit], dim: [limit * 2.2, height, thickness] }, // North
@@ -123,7 +140,10 @@ export class GameMap {
             { pos: [limit, height / 2, 0], dim: [thickness, height, limit * 2.2] }   // East
         ];
 
-        walls.forEach(w => {
+        walls.forEach((w, index) => {
+            // Rotate texture for side walls to match orientation if needed
+            // With BoxGeometry UVs, standard mapping usually works, but check aspect ratio
+
             const mesh = new THREE.Mesh(new THREE.BoxGeometry(...w.dim), boundaryMat);
             mesh.position.set(...w.pos);
             this.scene.add(mesh);
