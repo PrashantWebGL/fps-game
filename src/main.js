@@ -453,14 +453,16 @@ function startGame(difficulty) {
     // Blur potential inputs
     if (document.activeElement) document.activeElement.blur();
 
-    try {
-        if (!isMobile) {
+    // Request pointer lock only on desktop
+    if (!isMobile) {
+        try {
             player.controls.lock();
             console.log('Pointer lock requested');
+        } catch (e) {
+            console.error('Pointer lock failed:', e);
         }
-    } catch (e) {
-        console.error('Pointer lock failed:', e);
     }
+
     // Hide the instructions overlay (pause screen)
     instructionsEl.style.display = 'none';
     instructionsEl.style.visibility = 'hidden';
@@ -609,6 +611,15 @@ window.addEventListener('playerDied', async (event) => {
     // Stop boss music if playing
     soundManager.stopBossAmbient();
 
+    // Safely unlock pointer if on desktop
+    try {
+        if (!isMobile && document.pointerLockElement) {
+            document.exitPointerLock();
+        }
+    } catch (e) {
+        console.warn('Pointer unlock failed (safe to ignore on mobile):', e);
+    }
+
     // Disable Leaderboard Button
     if (btnShowLeaderboard) {
         btnShowLeaderboard.disabled = true;
@@ -618,11 +629,14 @@ window.addEventListener('playerDied', async (event) => {
 
     player.setFinalScore(score);
     const instructions = document.getElementById('instructions');
+
     // Show loading text while fetching async leaderboard
     instructions.innerHTML = '<h1 style="color:white; text-align:center; margin-top: 200px;">LOADING SCORES...</h1>';
     instructions.style.display = 'block';
     instructions.style.visibility = 'visible';
     instructions.style.opacity = '1';
+    instructions.style.pointerEvents = 'auto';
+    instructions.style.zIndex = '10000';
 
     // Hide controls
     if (mobileControlsTop) mobileControlsTop.style.display = 'none';
@@ -634,10 +648,32 @@ window.addEventListener('playerDied', async (event) => {
     // Explicitly stop breathing sound on death
     soundManager.stopBreathing();
 
-    const leaderboardHTML = await showLeaderboard(score); // false = save score
+    try {
+        // Add timeout to prevent infinite loading
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Leaderboard loading timeout')), 5000)
+        );
 
-    console.log('Leaderboard HTML generated, length:', leaderboardHTML.length);
-    instructions.innerHTML = leaderboardHTML;
+        const leaderboardPromise = showLeaderboard(score);
+
+        const leaderboardHTML = await Promise.race([leaderboardPromise, timeoutPromise]);
+
+        console.log('Leaderboard HTML generated, length:', leaderboardHTML.length);
+        instructions.innerHTML = leaderboardHTML;
+    } catch (error) {
+        console.error('Error loading leaderboard:', error);
+        // Fallback UI if leaderboard fails
+        instructions.innerHTML = `
+            <div style="background: rgba(0,0,0,0.9); padding: 40px; border-radius: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0 0 20px 0;">GAME OVER</h1>
+                <p style="color: #ffd700; font-size: 32px; margin: 20px 0;">Score: ${score}</p>
+                <p style="color: #ff6b6b; margin: 20px 0;">Unable to load leaderboard</p>
+                <button onclick="location.reload()" style="margin-top: 20px; padding: 15px 40px; font-size: 18px; font-weight: bold; cursor: pointer; background: #00ff00; color: black; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 255, 0, 0.3);">
+                    🔄 PLAY AGAIN
+                </button>
+            </div>
+        `;
+    }
 });
 
 document.addEventListener('click', () => {
@@ -646,34 +682,41 @@ document.addEventListener('click', () => {
         return;
     }
 
-    if (gameStarted && !player.controls.isLocked) {
-        player.controls.lock();
-    } else if (gameStarted) {
+    if (gameStarted && !isMobile && !player.controls.isLocked) {
+        try {
+            player.controls.lock();
+        } catch (e) {
+            console.warn('Pointer lock failed:', e);
+        }
+    } else if (gameStarted && !isMobile) {
         player.shoot(bullets);
     }
+    // On mobile, shooting is handled by touch controls or auto-fire
 });
 
-player.controls.addEventListener('lock', () => {
-    console.log('Pointer locked');
-    instructionsEl.style.display = 'none';
-    window.isGamePaused = false;
-});
+// Pointer lock event listeners (desktop only)
+if (!isMobile) {
+    player.controls.addEventListener('lock', () => {
+        console.log('Pointer locked');
+        instructionsEl.style.display = 'none';
+        window.isGamePaused = false;
+    });
 
-player.controls.addEventListener('unlock', () => {
-    console.log('Pointer unlocked');
-    if (player.isDead) {
-        // Don't change anything - leaderboard is already showing
-        return;
-    } else {
-        // Pause menu or just show instructions again? 
-        // For now, let's just keep it simple, maybe show "Click to Resume"
-        instructionsEl.style.display = 'block';
-        instructionsEl.innerHTML = '<h1>PAUSED</h1><p>Click to Resume</p>';
+    player.controls.addEventListener('unlock', () => {
+        console.log('Pointer unlocked');
+        if (player.isDead) {
+            // Don't change anything - leaderboard is already showing
+            return;
+        } else {
+            // Pause menu or just show instructions again?
+            instructionsEl.style.display = 'block';
+            instructionsEl.innerHTML = '<h1>PAUSED</h1><p>Click to Resume</p>';
 
-        // Stop breathing sound when paused
-        soundManager.stopBreathing();
-    }
-});
+            // Stop breathing sound when paused
+            soundManager.stopBreathing();
+        }
+    });
+}
 
 // Message Display System
 function showMessage(text, duration = 2000, color = '#FFD700', fontSize = '48px') {
