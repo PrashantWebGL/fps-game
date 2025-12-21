@@ -333,6 +333,9 @@ async function showLeaderboard(currentScore, viewOnly = false) {
 
 // Mobile detection
 const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+// iOS/Safari detection for browser-specific handling
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 // Get references after DOM is ready
 const mobileStartEl = document.getElementById('mobile-start');
@@ -606,18 +609,35 @@ btnHard.addEventListener('click', () => { if (playerName.length > 3) startGame('
 
 // Handle player death
 window.addEventListener('playerDied', async (event) => {
+    console.log('=== PLAYER DIED EVENT HANDLER START ===');
     console.log('Player died event triggered, score:', score);
+    console.log('Browser info - iOS:', isIOS, 'Safari:', isSafari, 'Mobile:', isMobile);
+
+    // CRITICAL: Mark player as dead immediately to stop game loop
+    player.isDead = true;
+    console.log('Player.isDead set to true');
 
     // Stop boss music if playing
-    soundManager.stopBossAmbient();
-
-    // Safely unlock pointer if on desktop
     try {
-        if (!isMobile && document.pointerLockElement) {
-            document.exitPointerLock();
-        }
+        soundManager.stopBossAmbient();
+        soundManager.stopBreathing();
+        console.log('Sounds stopped');
     } catch (e) {
-        console.warn('Pointer unlock failed (safe to ignore on mobile):', e);
+        console.warn('Error stopping sounds:', e);
+    }
+
+    // Safely unlock pointer - with iOS/Safari specific handling
+    if (!isIOS && !isSafari) {
+        try {
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+                console.log('Pointer unlocked');
+            }
+        } catch (e) {
+            console.warn('Pointer unlock failed (non-critical):', e);
+        }
+    } else {
+        console.log('Skipping pointer unlock on iOS/Safari');
     }
 
     // Disable Leaderboard Button
@@ -630,39 +650,47 @@ window.addEventListener('playerDied', async (event) => {
     player.setFinalScore(score);
     const instructions = document.getElementById('instructions');
 
-    // Show loading text while fetching async leaderboard
-    instructions.innerHTML = '<h1 style="color:white; text-align:center; margin-top: 200px;">LOADING SCORES...</h1>';
+    // CRITICAL: Force display of instructions overlay
+    console.log('Showing instructions overlay');
     instructions.style.display = 'block';
     instructions.style.visibility = 'visible';
     instructions.style.opacity = '1';
     instructions.style.pointerEvents = 'auto';
     instructions.style.zIndex = '10000';
+    instructions.innerHTML = '<h1 style="color:white; text-align:center; margin-top: 200px;">LOADING SCORES...</h1>';
 
     // Hide controls
-    if (mobileControlsTop) mobileControlsTop.style.display = 'none';
+    if (mobileControlsTop) {
+        mobileControlsTop.style.display = 'none';
+        console.log('Mobile controls hidden');
+    }
 
-    // Fix: Use global/closure variable instead of 'this'
-    if (window.isScoreSavedForThisRun) return;
+    // Prevent duplicate score saves
+    if (window.isScoreSavedForThisRun) {
+        console.log('Score already saved, skipping');
+        return;
+    }
     window.isScoreSavedForThisRun = true;
 
-    // Explicitly stop breathing sound on death
-    soundManager.stopBreathing();
-
+    // Load and display leaderboard with robust error handling
     try {
-        // Add timeout to prevent infinite loading
+        console.log('Fetching leaderboard...');
+
+        // Shorter timeout for mobile/Safari (3 seconds instead of 5)
+        const timeoutDuration = (isIOS || isSafari) ? 3000 : 5000;
         const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Leaderboard loading timeout')), 5000)
+            setTimeout(() => reject(new Error('Leaderboard loading timeout')), timeoutDuration)
         );
 
         const leaderboardPromise = showLeaderboard(score);
-
         const leaderboardHTML = await Promise.race([leaderboardPromise, timeoutPromise]);
 
         console.log('Leaderboard HTML generated, length:', leaderboardHTML.length);
         instructions.innerHTML = leaderboardHTML;
+        console.log('Leaderboard displayed successfully');
     } catch (error) {
         console.error('Error loading leaderboard:', error);
-        // Fallback UI if leaderboard fails
+        // Fallback UI if leaderboard fails - GUARANTEED to show
         instructions.innerHTML = `
             <div style="background: rgba(0,0,0,0.9); padding: 40px; border-radius: 20px; text-align: center;">
                 <h1 style="color: white; margin: 0 0 20px 0;">GAME OVER</h1>
@@ -673,7 +701,10 @@ window.addEventListener('playerDied', async (event) => {
                 </button>
             </div>
         `;
+        console.log('Fallback UI displayed');
     }
+
+    console.log('=== PLAYER DIED EVENT HANDLER END ===');
 });
 
 document.addEventListener('click', () => {
@@ -887,6 +918,11 @@ function animate() {
     // Pause Logic
     // Desktop: Pause if pointer is unlocked (and not dead)
     // Mobile: Pause if window.isGamePaused is set
+    // CRITICAL: Stop all game logic immediately if player is dead
+    if (player.isDead) {
+        return; // Don't process any game logic when dead
+    }
+
     const isPaused = (!isMobile && !player.controls.isLocked) || (isMobile && window.isGamePaused);
 
     if (gameStarted && !player.isDead && !isPaused) { // Added pause check

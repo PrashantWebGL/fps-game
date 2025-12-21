@@ -467,11 +467,35 @@ export class Player {
     }
 
     die() {
+        console.log('Player die() called');
         this.isDead = true;
-        this.controls.unlock();
-        // Trigger game over event that main.js will handle
-        const event = new CustomEvent('playerDied', { detail: { score: this.finalScore || 0 } });
-        window.dispatchEvent(event);
+
+        // iOS/Safari detection
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+        // Safely unlock pointer - Safari/iOS may not support or may fail
+        if (!isIOS) {
+            try {
+                this.controls.unlock();
+                console.log('Pointer unlocked successfully');
+            } catch (e) {
+                console.warn('Failed to unlock pointer (non-critical):', e);
+            }
+        } else {
+            console.log('Skipping pointer unlock on iOS');
+        }
+
+        // CRITICAL: Always dispatch event, even if unlock fails
+        try {
+            const event = new CustomEvent('playerDied', { detail: { score: this.finalScore || 0 } });
+            window.dispatchEvent(event);
+            console.log('playerDied event dispatched');
+        } catch (e) {
+            console.error('CRITICAL: Failed to dispatch playerDied event:', e);
+            // Force fallback - directly show game over
+            alert('Game Over! Score: ' + (this.finalScore || 0));
+        }
     }
 
     setFinalScore(score) {
