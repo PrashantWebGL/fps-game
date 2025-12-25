@@ -9,6 +9,9 @@ import { SoundManager } from './audio.js';
 import { HealthPotion } from './healthPotion.js';
 import { RedPotion } from './RedPotion.js';
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'; // Needed for cloning skinned meshes
+import { SoldierEnemy } from './SoldierEnemy.js';
 import { inject } from '@vercel/analytics';
 
 
@@ -24,14 +27,14 @@ renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 // Lighting
-const ambientLight = new THREE.AmbientLight(0x404040, 0.6); // Increased intensity
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.2); // Brighter
 scene.add(ambientLight);
 
-const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x444444, 0.6); // Sky color, Ground color, Intensity
+const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x444444, 1.0); // Brighter
 hemiLight.position.set(0, 50, 0);
 scene.add(hemiLight);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5); // Brighter Sun
 dirLight.position.set(10, 20, 10);
 dirLight.castShadow = true;
 dirLight.shadow.camera.top = 30;
@@ -58,6 +61,92 @@ const gameMap = new GameMap(scene);
 gameMap.create();
 // const walls = gameMap.walls; // Removed to avoid stale reference
 
+// Preload Soldier Model
+const gltfLoader = new GLTFLoader();
+gltfLoader.load('/assets/enemies/Soldier.glb', (gltf) => {
+    soldierModel = gltf.scene;
+    soldierModel.traverse(function (object) {
+        if (object.isMesh) object.castShadow = true;
+    });
+    soldierAnimations = gltf.animations;
+    console.log('Soldier model loaded with animations:', soldierAnimations.map(a => a.name));
+}, undefined, (error) => {
+    console.error('An error happened loading soldier model:', error);
+});
+
+// Snow Effect
+let snowSystem = null;
+
+function createSnow() {
+    if (snowSystem) return; // Already exists
+
+    const particleCount = 2000;
+    const geometry = new THREE.BufferGeometry();
+    const positions = [];
+    const velocities = [];
+
+    for (let i = 0; i < particleCount; i++) {
+        // Random position above player
+        positions.push(
+            (Math.random() - 0.5) * 100, // x
+            Math.random() * 50,          // y
+            (Math.random() - 0.5) * 100  // z
+        );
+
+        velocities.push(
+            (Math.random() - 0.5) * 0.5, // drift x
+            -1 - Math.random(),          // fall y
+            (Math.random() - 0.5) * 0.5  // drift z
+        );
+    }
+
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+    // Custom shader or simple points? Simple points for now.
+    const material = new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 0.2,
+        transparent: true,
+        opacity: 0.8
+    });
+
+    snowSystem = new THREE.Points(geometry, material);
+    snowSystem.userData = { velocities: velocities };
+    scene.add(snowSystem);
+}
+
+function updateSnow(delta) {
+    if (!snowSystem) return;
+
+    const positions = snowSystem.geometry.attributes.position.array;
+    const velocities = snowSystem.userData.velocities;
+
+    for (let i = 0; i < positions.length / 3; i++) {
+        // Fall
+        positions[i * 3 + 1] += velocities[i * 3 + 1] * delta * 5;
+
+        // Drift
+        positions[i * 3] += velocities[i * 3] * delta * 2;
+        positions[i * 3 + 2] += velocities[i * 3 + 2] * delta * 2;
+
+        // Reset if below ground
+        if (positions[i * 3 + 1] < 0) {
+            positions[i * 3 + 1] = 50;
+            positions[i * 3] = (Math.random() - 0.5) * 100 + player.dummyCamera.position.x; // Reappearing relative to player? 
+            // Better: random world box, but for infinite feel, updating x/z relative to player is good trick
+            // but for now just reset Y, let them drift out
+        }
+    }
+    snowSystem.geometry.attributes.position.needsUpdate = true;
+
+    // Follow player (infinite effect hack)
+    // snowSystem.position.x = player.dummyCamera.position.x;
+    // snowSystem.position.z = player.dummyCamera.position.z;
+    // But we need to offset texture... points don't tile well like that.
+    // simpler: just spawn enough around 0,0 and let them fall.
+}
+
+
 
 // Game State
 const bullets = [];
@@ -75,6 +164,8 @@ let score = 0;
 let killCount = 0;
 let maxEnemies = 1;
 let gameStarted = false;
+let soldierModel = null;
+let soldierAnimations = [];
 const potions = [];
 let bossSpawned = false; // Track if boss is currently active
 let totalKills = 0; // Track total kills for boss spawn
@@ -440,6 +531,10 @@ function startGame(difficulty) {
         case 'easy': maxEnemies = 1; break;
         case 'medium': maxEnemies = 2; break;
         case 'hard': maxEnemies = 4; break;
+        case 'expert':
+            maxEnemies = 1;
+            createSnow();
+            break;
     }
     gameStarted = true;
     // Reset score saved flag for new game
@@ -532,7 +627,8 @@ const nameInput = document.getElementById('player-name');
 const btnEasy = document.getElementById('btn-easy');
 const btnMedium = document.getElementById('btn-medium');
 const btnHard = document.getElementById('btn-hard');
-const buttons = [btnEasy, btnMedium, btnHard];
+const btnExpert = document.getElementById('btn-expert');
+const buttons = [btnEasy, btnMedium, btnHard, btnExpert];
 const btnShowLeaderboard = document.getElementById('btn-show-leaderboard');
 
 // Create a safe close function for the leaderboard
@@ -606,6 +702,7 @@ nameInput.addEventListener('input', (e) => {
 btnEasy.addEventListener('click', () => { if (playerName.length > 3) startGame('easy'); });
 btnMedium.addEventListener('click', () => { if (playerName.length > 3) startGame('medium'); });
 btnHard.addEventListener('click', () => { if (playerName.length > 3) startGame('hard'); });
+btnExpert.addEventListener('click', () => { if (playerName.length > 3) startGame('expert'); });
 
 // Handle player death
 window.addEventListener('playerDied', async (event) => {
@@ -896,9 +993,21 @@ setInterval(() => {
         }
 
         if (spawnPos) {
-            const enemy = new Enemy(scene, player.position, soundManager);
-            enemy.mesh.position.set(spawnPos.x, 0, spawnPos.z); // Override default random spawn
-            enemies.push(enemy);
+            if (currentDifficulty === 'expert' && soldierModel) {
+                // Determine if we spawn a Boss (still existing logic? Or just Soldier?)
+                // Assuming Solders are normal enemies in Expert mode.
+
+                // Clone using SkeletonUtils to handle skinned meshes correctly
+                const clone = SkeletonUtils.clone(soldierModel);
+                const enemy = new SoldierEnemy(scene, player.position, soundManager, clone, soldierAnimations);
+                enemy.mesh.position.set(spawnPos.x, 0, spawnPos.z);
+                enemies.push(enemy);
+
+            } else {
+                const enemy = new Enemy(scene, player.position, soundManager);
+                enemy.mesh.position.set(spawnPos.x, 0, spawnPos.z); // Override default random spawn
+                enemies.push(enemy);
+            }
         }
     }
 }, 2000);
@@ -1238,6 +1347,7 @@ function animate() {
 
         // Update Particles
         particles.update(delta);
+        updateSnow(delta);
 
         // Crosshair Targeting Logic
         const crosshair = document.getElementById('crosshair');
