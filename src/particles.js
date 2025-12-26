@@ -11,7 +11,7 @@ export class Particles {
         // Create geometry and material once if not already created
         if (!this.particleGeometry) {
             this.particleGeometry = new THREE.BoxGeometry(0.05, 0.05, 0.05);
-            this.particleMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            this.particleMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
         }
 
         for (let i = 0; i < particleCount; i++) {
