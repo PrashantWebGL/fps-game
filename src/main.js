@@ -300,10 +300,10 @@ async function updateBannerContent(mesh) {
     const difficultyForBanner = currentDifficulty || 'easy';
     const data = await getLeaderboard(difficultyForBanner);
 
-    // Create Canvas
+    // Create Canvas (HIGH RES for clarity)
     const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 512;
+    canvas.width = 2048;
+    canvas.height = 1024;
     const ctx = canvas.getContext('2d');
 
     // Background
@@ -311,59 +311,59 @@ async function updateBannerContent(mesh) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Border
-    ctx.lineWidth = 10;
+    ctx.lineWidth = 20;
     ctx.strokeStyle = '#ffd700';
     ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
     // Header
-    ctx.font = 'bold 60px Arial';
+    ctx.font = 'bold 120px Arial';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ff0000'; // GOLD
-    ctx.fillText(`LEADERBOARD (${difficultyForBanner.toUpperCase()})`, canvas.width / 2, 80);
+    ctx.fillText(`LEADERBOARD (${difficultyForBanner.toUpperCase()})`, canvas.width / 2, 160);
 
     // Columns
-    ctx.font = 'bold 40px Arial';
+    ctx.font = 'bold 80px Arial';
     ctx.fillStyle = '#00ff88';
-    ctx.fillText('Rank', 100, 150);
+    ctx.fillText('Rank', 200, 300);
     ctx.textAlign = 'left';
-    ctx.fillText('Name', 250, 150);
+    ctx.fillText('Name', 500, 300);
     ctx.textAlign = 'right';
-    ctx.fillText('Score', 900, 150);
+    ctx.fillText('Score', 1800, 300);
 
     // Line
     ctx.beginPath();
-    ctx.moveTo(50, 170);
-    ctx.lineTo(974, 170);
+    ctx.moveTo(100, 340);
+    ctx.lineTo(1948, 340);
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 8;
     ctx.stroke();
 
     // Entries
-    ctx.font = '40px Arial';
+    ctx.font = '80px Arial';
     ctx.fillStyle = '#ffffff';
 
     if (data.length === 0) {
         ctx.textAlign = 'center';
-        ctx.fillText('No scores yet!', canvas.width / 2, 300);
+        ctx.fillText('No scores yet!', canvas.width / 2, 600);
     } else {
         const slots = Math.min(data.length, 5); // Show top 5
         for (let i = 0; i < slots; i++) {
             const entry = data[i];
-            const y = 230 + (i * 60);
+            const y = 460 + (i * 120);
 
             // Rank
             ctx.textAlign = 'center';
             ctx.fillStyle = i === 0 ? '#ffd700' : '#ffffff';
-            ctx.fillText(`#${i + 1}`, 100, y);
+            ctx.fillText(`#${i + 1}`, 200, y);
 
             // Name
             ctx.textAlign = 'left';
-            ctx.fillText(entry.name.substring(0, 15), 250, y);
+            ctx.fillText(entry.name.substring(0, 15), 500, y);
 
             // Score
             ctx.textAlign = 'right';
             ctx.fillStyle = '#00ff88';
-            ctx.fillText(entry.score, 900, y);
+            ctx.fillText(entry.score, 1800, y);
         }
     }
 
@@ -381,7 +381,7 @@ async function updateBannerContent(mesh) {
     mesh.material.map = texture;
     mesh.material.needsUpdate = true;
 
-    // Reset Timer (5 minutes = 300,000 ms)
+    // Reset Timer (5 seconds)
     setTimeout(() => {
         if (mesh.material.map === texture) { // Check if hasn't been updated again?
             mesh.material.map = originalMap;
@@ -389,7 +389,7 @@ async function updateBannerContent(mesh) {
             mesh.userData.isShowingLeaderboard = false;
             texture.dispose(); // Cleanup memory
         }
-    }, 300000); // 5 minutes
+    }, 5000); // 5 seconds
 }
 
 async function showLeaderboard(currentScore, viewOnly = false) {
