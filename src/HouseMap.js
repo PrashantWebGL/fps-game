@@ -13,6 +13,7 @@ export class HouseMap {
         HouseMap.createWalls(gameMap);
         HouseMap.createHouse(gameMap, 30, -30);
         HouseMap.createCemetery(gameMap, -30, 30);
+        HouseMap.createAdBanners(gameMap); // Add Banners
         gameMap.createCityBoundary(50, 10, '/assets/textures/housefence.jpg'); // Size 50, Height 10, Fence Texture
     }
 
@@ -125,5 +126,20 @@ export class HouseMap {
             gameMap.walls.push(stone);
             gameMap.mapObjects.push(stone);
         }
+    }
+
+    static createAdBanners(gameMap) {
+        // 4 Ad Banners (TVs/Projectors)
+        // 1. Near spawn (facing player)
+        gameMap.createAdBanner(0, 9.5, -15, 0);
+
+        // 2. Near House (side)
+        gameMap.createAdBanner(35, 9.5, -30, -Math.PI / 2);
+
+        // 3. Near Cemetery (side)
+        gameMap.createAdBanner(-35, 9.5, 30, Math.PI / 2);
+
+        // 4. Random spot (behind spawn)
+        gameMap.createAdBanner(15, 9.5, 15, Math.PI);
     }
 }

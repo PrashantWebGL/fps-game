@@ -105,6 +105,50 @@ export class GameMap {
         this.treePositions.push(new THREE.Vector3(x, 0, z)); // Track position
     }
 
+    createAdBanner(x, y, z, ry = 0) {
+        const group = new THREE.Group();
+        group.position.set(x, y, z);
+        group.rotation.y = ry;
+
+        // Frame (TV/Projector style)
+        const frameGeo = new THREE.BoxGeometry(8, 4.5, 0.5);
+        const frameMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
+        const frame = new THREE.Mesh(frameGeo, frameMat);
+        frame.castShadow = true;
+        group.add(frame);
+
+        // Screen
+        const textureLoader = new THREE.TextureLoader();
+        const screenTexture = textureLoader.load('/assets/logo/1536*1024.png');
+        // Check for special characters in path just in case, but standard load should work.
+
+        const screenGeo = new THREE.PlaneGeometry(7.6, 4.1);
+        const screenMat = new THREE.MeshBasicMaterial({
+            map: screenTexture,
+            color: 0xffffff,
+            side: THREE.DoubleSide
+        });
+        const screen = new THREE.Mesh(screenGeo, screenMat);
+        screen.position.z = 0.26; // Slightly in front of frame
+        screen.userData = { type: 'ad-banner', originalMap: screenTexture };
+        group.add(screen);
+
+        // Back Screen
+        const backScreen = new THREE.Mesh(screenGeo, screenMat);
+        backScreen.position.z = -0.26;
+        backScreen.rotation.y = Math.PI;
+        backScreen.userData = { type: 'ad-banner', originalMap: screenTexture };
+        group.add(backScreen);
+
+        this.scene.add(group);
+        this.mapObjects.push(group);
+
+        // Add screens as walls/collidables
+        this.walls.push(screen);
+        this.walls.push(backScreen); // Enable hit detection on both sides
+        this.walls.push(frame);
+    }
+
     createCityBoundary(gridSize, height = 50, textureUrl = null) {
         // Create large invisible-ish walls at the edges
         const limit = gridSize + 10; // e.g. 110

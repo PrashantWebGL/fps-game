@@ -19,6 +19,11 @@ import { inject } from '@vercel/analytics';
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb); // Sky blue
 
+// Variable Declarations (Hoisted)
+let soldierModel = null;
+let soldierAnimations = [];
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -155,7 +160,7 @@ const particles = new Particles(scene);
 const soundManager = new SoundManager();
 
 // Player
-const player = new Player(camera, scene, document.body, soundManager);
+const player = new Player(camera, scene, document.body, soundManager, isSafari); // Pass isSafari
 scene.add(player.hitbox); // Add hitbox to scene for debugging/logic
 player.dummyCamera.position.set(0, 2, 10); // Start position (Safe Zone)
 
@@ -164,8 +169,8 @@ let score = 0;
 let killCount = 0;
 let maxEnemies = 1;
 let gameStarted = false;
-let soldierModel = null;
-let soldierAnimations = [];
+// soldierModel defined at top
+// soldierAnimations defined at top
 const potions = [];
 let bossSpawned = false; // Track if boss is currently active
 let totalKills = 0; // Track total kills for boss spawn
@@ -279,6 +284,112 @@ async function saveScore(name, score, difficulty) {
     }
 
     return { id: newId, leaderboard: await getLeaderboard(difficulty) };
+}
+
+// Banner Interaction
+async function updateBannerContent(mesh) {
+    // Debounce: don't reload if already showing (or recently triggered)
+    if (mesh.userData.isShowingLeaderboard) return;
+
+    mesh.userData.isShowingLeaderboard = true;
+    console.log('Banner hit! Loading leaderboard...');
+
+    // Visual feedback immediately (flash or something? maybe just wait for texture)
+
+    // Fetch Data
+    const difficultyForBanner = currentDifficulty || 'easy';
+    const data = await getLeaderboard(difficultyForBanner);
+
+    // Create Canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    // Background
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Border
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = '#ffd700';
+    ctx.strokeRect(0, 0, canvas.width, canvas.height);
+
+    // Header
+    ctx.font = 'bold 60px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff0000'; // GOLD
+    ctx.fillText(`LEADERBOARD (${difficultyForBanner.toUpperCase()})`, canvas.width / 2, 80);
+
+    // Columns
+    ctx.font = 'bold 40px Arial';
+    ctx.fillStyle = '#00ff88';
+    ctx.fillText('Rank', 100, 150);
+    ctx.textAlign = 'left';
+    ctx.fillText('Name', 250, 150);
+    ctx.textAlign = 'right';
+    ctx.fillText('Score', 900, 150);
+
+    // Line
+    ctx.beginPath();
+    ctx.moveTo(50, 170);
+    ctx.lineTo(974, 170);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    // Entries
+    ctx.font = '40px Arial';
+    ctx.fillStyle = '#ffffff';
+
+    if (data.length === 0) {
+        ctx.textAlign = 'center';
+        ctx.fillText('No scores yet!', canvas.width / 2, 300);
+    } else {
+        const slots = Math.min(data.length, 5); // Show top 5
+        for (let i = 0; i < slots; i++) {
+            const entry = data[i];
+            const y = 230 + (i * 60);
+
+            // Rank
+            ctx.textAlign = 'center';
+            ctx.fillStyle = i === 0 ? '#ffd700' : '#ffffff';
+            ctx.fillText(`#${i + 1}`, 100, y);
+
+            // Name
+            ctx.textAlign = 'left';
+            ctx.fillText(entry.name.substring(0, 15), 250, y);
+
+            // Score
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#00ff88';
+            ctx.fillText(entry.score, 900, y);
+        }
+    }
+
+    // UPDATE TEXTURE
+    const texture = new THREE.CanvasTexture(canvas);
+
+    // If double-sided mesh logic:
+    // We applied texture to mesh.material.map.
+    // Assuming mesh has its own material clone or we clone it now.
+    // If we shared materials, all banners would update! 
+    // We should ensure unique materials or just clone explicitly.
+    // Since GameMap creates new MeshBasicMaterial for each banner, they are unique instances.
+
+    const originalMap = mesh.userData.originalMap; // Saved in map.js
+    mesh.material.map = texture;
+    mesh.material.needsUpdate = true;
+
+    // Reset Timer (5 minutes = 300,000 ms)
+    setTimeout(() => {
+        if (mesh.material.map === texture) { // Check if hasn't been updated again?
+            mesh.material.map = originalMap;
+            mesh.material.needsUpdate = true;
+            mesh.userData.isShowingLeaderboard = false;
+            texture.dispose(); // Cleanup memory
+        }
+    }, 300000); // 5 minutes
 }
 
 async function showLeaderboard(currentScore, viewOnly = false) {
@@ -426,10 +537,47 @@ async function showLeaderboard(currentScore, viewOnly = false) {
 const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 // iOS/Safari detection for browser-specific handling
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
 
 // Get references after DOM is ready
 const mobileStartEl = document.getElementById('mobile-start');
+
+// Validation Logic (Hoisted)
+function checkNameValidity(name) {
+    playerName = name;
+    const isValid = playerName && playerName.length > 3;
+
+    // Ensure buttons are available in scope or fetch them here if needed
+    // Global 'buttons' array might not be ready if this runs too early, but it's called inside init or event, so DOM should be ready.
+    // However, 'buttons' variable is defined later (const buttons = ...). 
+    // We should re-fetch or use the global const defined below if possible. 
+    // Wait, 'buttons' const is defined where? Let's check view.
+    // It's likely defined near the difficulty buttons.
+    // Safest is to fetch them inside helper.
+
+    const relevantButtons = [
+        document.getElementById('btn-easy'),
+        document.getElementById('btn-medium'),
+        document.getElementById('btn-hard'),
+        document.getElementById('btn-expert')
+    ];
+    const btnLB = document.getElementById('btn-show-scores');
+
+    relevantButtons.forEach(btn => {
+        if (!btn) return;
+        btn.disabled = !isValid;
+        btn.style.opacity = isValid ? '1' : '0.5';
+        btn.style.cursor = isValid ? 'pointer' : 'not-allowed';
+    });
+    if (btnLB) {
+        btnLB.disabled = !isValid;
+        btnLB.style.opacity = isValid ? '1' : '0.5';
+        btnLB.style.cursor = isValid ? 'pointer' : 'not-allowed';
+    }
+    return isValid;
+}
+window.checkNameValidity = checkNameValidity;
+
 
 // Show mobile start overlay on small screens
 function showMobileStartOverlay() {
@@ -438,6 +586,17 @@ function showMobileStartOverlay() {
     }
 }
 // showMobileStartOverlay();
+
+// Restore player name from localStorage
+const savedName = localStorage.getItem('fps_playerName');
+if (savedName) {
+    const nameInput = document.getElementById('player-name');
+    if (nameInput) {
+        nameInput.value = savedName;
+        // Trigger validation immediately
+        checkNameValidity(savedName);
+    }
+}
 
 // Mobile users will use the same difficulty selection as desktop
 // No need for separate "tap to play" overlay
@@ -524,6 +683,8 @@ if (isMobile) {
 function startGame(difficulty) {
     const nameInput = document.getElementById('player-name');
     playerName = nameInput.value.trim() || 'Anonymous';
+    // Persist player name
+    localStorage.setItem('fps_playerName', playerName);
     currentDifficulty = difficulty; // Store the difficulty
 
     console.log('Starting game with difficulty:', difficulty);
@@ -534,7 +695,11 @@ function startGame(difficulty) {
         case 'expert':
             maxEnemies = 1;
             createSnow();
+            document.getElementById('expert-warning').style.display = 'block'; // Show warning
             break;
+    }
+    if (difficulty !== 'expert') {
+        document.getElementById('expert-warning').style.display = 'none';
     }
     gameStarted = true;
     // Reset score saved flag for new game
@@ -603,6 +768,7 @@ function updateMapButtons() {
 }
 
 btnMapHouse.addEventListener('click', () => {
+    console.log('House Map Clicked');
     if (selectedMap === 'house') return;
     selectedMap = 'house';
     updateMapButtons();
@@ -613,6 +779,7 @@ btnMapHouse.addEventListener('click', () => {
 });
 
 btnMapCity.addEventListener('click', () => {
+    console.log('City Map Clicked');
     if (selectedMap === 'city') return;
     selectedMap = 'city';
     updateMapButtons();
@@ -682,21 +849,17 @@ if (btnShowLeaderboard) {
     btnShowLeaderboard.style.cursor = 'not-allowed';
 }
 
+// Final check: If name was restored, re-enable buttons now that they are initialized
+if (playerName && playerName.length > 3) {
+    checkNameValidity(playerName);
+}
+
+// function checkNameValidity moved to top scope
+
 nameInput.addEventListener('input', (e) => {
     // Validation: Only alphanumerics, underscores, hyphens, dollars
     e.target.value = e.target.value.replace(/[^a-zA-Z0-9_$-]/g, '');
-    playerName = e.target.value;
-    const isValid = playerName.length > 3;
-    buttons.forEach(btn => {
-        btn.disabled = !isValid;
-        btn.style.opacity = isValid ? '1' : '0.5';
-        btn.style.cursor = isValid ? 'pointer' : 'not-allowed';
-    });
-    if (btnShowLeaderboard) {
-        btnShowLeaderboard.disabled = !isValid;
-        btnShowLeaderboard.style.opacity = isValid ? '1' : '0.5';
-        btnShowLeaderboard.style.cursor = isValid ? 'pointer' : 'not-allowed';
-    }
+    checkNameValidity(e.target.value);
 });
 
 btnEasy.addEventListener('click', () => { if (playerName.length > 3) startGame('easy'); });
@@ -1199,7 +1362,7 @@ function animate() {
                 if (intersection) {
                     if (!closestHit || intersection.distance < closestHit.distance) {
                         closestHit = {
-                            type: 'wall',
+                            type: wall.userData.type === 'ad-banner' ? 'banner' : 'wall',
                             distance: intersection.distance,
                             point: intersection.point,
                             object: wall
@@ -1249,6 +1412,11 @@ function animate() {
                 if (closestHit.type === 'wall') {
                     bullet.remove();
                     bullets.splice(i, 1);
+                } else if (closestHit.type === 'banner') {
+                    bullet.remove();
+                    bullets.splice(i, 1);
+                    // Trigger interactive banner
+                    updateBannerContent(closestHit.object);
                 } else if (closestHit.type === 'enemy') {
                     const enemy = closestHit.enemy;
 
@@ -1324,7 +1492,12 @@ function animate() {
                         }
                     }
                 } else if (closestHit.type === 'player') {
-                    player.takeDamage(10); // Enemy damage: 10 shots to kill
+                    // Headshot detection: hits near camera height
+                    const playerHeadHeight = player.dummyCamera.position.y;
+                    const hitHeight = closestHit.point.y;
+                    const isHeadshot = hitHeight > (playerHeadHeight - 0.4);
+
+                    player.takeDamage(10, isHeadshot); // Enemy damage: 10 shots to kill
                     particles.createBlood(bullet.position, bullet.velocity);
                     bullet.remove();
                     bullets.splice(i, 1);

@@ -184,9 +184,15 @@
       backdrop-filter: blur(10px);
       color: white;
       z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
     }
 
     #instructions h1 {
+      display: none;
+      /* Hidden by default as user requested (only divisible when logo is NOT on screen) */
       color: white;
       margin: 0;
     }
@@ -270,6 +276,87 @@
       width: 180px !important;
       font-size: 16px !important;
       padding: 10px !important;
+    }
+
+    /* General Responsive Media Query */
+
+    /* Global Uniformity for Buttons */
+    #map-selection-container button,
+    #difficulty-selection-container button {
+      padding: 15px 30px !important;
+      font-size: 18px !important;
+      font-weight: bold !important;
+      border-radius: 8px !important;
+      min-width: 120px;
+    }
+
+    /* General Responsive Media Query (Portrait/Small Screens) */
+    @media (max-width: 768px) {
+      #instructions {
+        padding: 10px !important;
+        width: 90% !important;
+        max-width: 350px;
+        /* Prevent being too wide on small tablets */
+      }
+
+      #instructions img {
+        max-width: 80px !important;
+        margin-bottom: 5px !important;
+      }
+
+      #instructions h1 {
+        font-size: 20px !important;
+        margin-bottom: 5px !important;
+      }
+
+      #player-name {
+        width: 100% !important;
+        font-size: 16px !important;
+        padding: 8px !important;
+        box-sizing: border-box;
+      }
+
+      #map-selection-container {
+        flex-wrap: wrap;
+        margin: 10px 0 !important;
+      }
+
+      /* Unified Button Styling for Mobile */
+      #map-selection-container button,
+      #difficulty-selection-container button {
+        padding: 12px 15px !important;
+        /* Larger touch target */
+        font-size: 14px !important;
+        flex: 1 1 auto;
+        /* Allow growth */
+        min-width: 100px;
+      }
+
+      #difficulty-selection-container {
+        flex-wrap: wrap;
+        gap: 10px !important;
+        margin-top: 10px !important;
+      }
+    }
+
+    /* Landscape Mobile Query - Hide Logo to save vertical space */
+    @media (max-height: 500px) {
+      #instructions img {
+        display: none !important;
+      }
+
+      #instructions {
+        padding: 5px !important;
+        top: 50%;
+        transform: translate(-50%, -50%);
+      }
+
+      #instructions h1 {
+        display: block !important;
+        /* Show heading because logo is hidden */
+        font-size: 18px !important;
+        margin-bottom: 2px !important;
+      }
     }
   </style>
 </head>
@@ -373,9 +460,9 @@
   </div>
   <div id="instructions">
     <h1 style="color: white; margin: 0 0 20px 0; font-size: 32px;">Epic Shooter 3D</h1>
-
-    <p style="text-align: center; color: #ddd; margin-bottom: 5px;">ENTER YOUR NAME</p>
-    <input type="text" id="player-name" placeholder="Be Creative" maxlength="20" style="
+    <img src="/assets/logo/1536*1024.png"
+      style="max-width: 300px; margin-bottom: 20px; filter: drop-shadow(0 0 10px rgba(0,0,0,0.5));" alt="Logo">
+    <input type="text" id="player-name" placeholder="ENTER YOUR NAME" maxlength="20" style="
         padding: 15px; 
         font-size: 18px; 
         width: 250px; 
@@ -390,7 +477,7 @@
     <div id="map-selection-container" style="margin: 20px 0; display: flex; gap: 10px; justify-content: center;">
       <button id="btn-map-house"
         style="padding: 10px 20px; font-weight: bold; border-radius: 5px; border: 2px solid #00ff00; background: #ffffff; color: black; cursor: pointer;">
-        🏠 HOUSE
+        🏠 FARM HOUSE
       </button>
       <button id="btn-map-city"
         style="padding: 10px 20px; font-weight: bold; border-radius: 5px; border: 2px solid #555; background: rgba(0,0,0,0.5); color: white; cursor: pointer;">
@@ -398,7 +485,8 @@
       </button>
     </div>
 
-    <div style="display: flex; gap: 20px; justify-content: center; margin-top: 20px;">
+    <div id="difficulty-selection-container"
+      style="display: flex; gap: 20px; justify-content: center; margin-top: 20px;">
       <button id="btn-easy"
         style="padding: 15px 30px; font-size: 18px; font-weight: bold; cursor: pointer; background: #00ff00; color: black; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 255, 0, 0.3); transition: all 0.2s;"
         disabled>EASY</button>
@@ -411,6 +499,10 @@
       <button id="btn-expert"
         style="padding: 15px 30px; font-size: 18px; font-weight: bold; cursor: pointer; background: #800080; color: white; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(128, 0, 128, 0.3); transition: all 0.2s;"
         disabled>EXPERT</button>
+    </div>
+    <div id="expert-warning"
+      style="display: none; color: #ffcc00; margin-top: 15px; font-weight: bold; text-shadow: 0 0 10px rgba(255,204,0,0.5); font-size: 14px; max-width: 400px; line-height: 1.4;">
+      ⚠️ This map is still in development mode throughout EXPERT level. Please be patient.
     </div>
     <p style="margin-top: 25px; font-size: 16px; color: rgba(255, 255, 255, 0.9);">WASD to Move | Click to Shoot</p>
   </div>

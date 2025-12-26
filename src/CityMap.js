@@ -27,6 +27,7 @@ export class CityMap {
         CityMap.createBuildings(gameMap, gridSize, streetWidth, blockSize, buildingTextures);
         CityMap.createCars(gameMap, gridSize);
         CityMap.createCivilians(gameMap, gridSize, 15);
+        CityMap.createAdBanners(gameMap); // Add Banners
         gameMap.createCityBoundary(gridSize, 10, '/assets/textures/cityouterwall.jpg');
     }
 
@@ -203,5 +204,20 @@ export class CityMap {
                 waitTime: 0
             });
         }
+    }
+
+    static createAdBanners(gameMap) {
+        // 4 Ad Banners in City (TVs/Projectors)
+        // 1. North (Front of initial view)
+        gameMap.createAdBanner(0, 7, -25, 0);
+
+        // 2. South
+        gameMap.createAdBanner(0, 7, 25, Math.PI);
+
+        // 3. East
+        gameMap.createAdBanner(25, 7, 0, -Math.PI / 2);
+
+        // 4. West
+        gameMap.createAdBanner(-25, 7, 0, Math.PI / 2);
     }
 }
