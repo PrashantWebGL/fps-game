@@ -9,7 +9,7 @@ export class MultiplayerManager {
         this.remotePlayers = new Map(); // playerId -> { mesh, data }
         this.isConnected = false;
         this.playerCount = 1; // Start with local player
-        this.serverUrl = 'http://localhost:3001';
+        this.serverUrl = 'https://epicshooter3d.onrender.com';
 
         // Callbacks
         this.onKillConfirmed = null;
