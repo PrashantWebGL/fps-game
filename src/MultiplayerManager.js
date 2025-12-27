@@ -14,6 +14,8 @@ export class MultiplayerManager {
         // Callbacks
         this.onKillConfirmed = null;
         this.onDeathLimitReached = null;
+        this.onRemoteShot = null;
+        this.onPlayerJoined = null;
     }
 
     connect(playerName) {
@@ -56,9 +58,15 @@ export class MultiplayerManager {
             });
 
             // Listen for new players
-            this.socket.on('player-joined', (player) => {
-                console.log('Player joined:', player.name);
-                this.addRemotePlayer(player);
+            this.socket.on('player-joined', (data) => {
+                console.log('Player joined:', data.name);
+                this.addRemotePlayer(data);
+                this.playerCount++;
+                this.updatePlayerCountUI(this.playerCount);
+                this.showJoinMessage(data.name);
+                if (this.onPlayerJoined) {
+                    this.onPlayerJoined(data);
+                }
             });
 
             // Listen for player movement
@@ -82,6 +90,9 @@ export class MultiplayerManager {
                 const remotePlayer = this.remotePlayers.get(data.id);
                 if (remotePlayer) {
                     this.createMuzzleFlash(remotePlayer.mesh.position);
+                    if (this.onRemoteShot) {
+                        this.onRemoteShot(data);
+                    }
                 }
             });
 
@@ -280,29 +291,61 @@ export class MultiplayerManager {
         const killMessage = document.createElement('div');
         killMessage.className = 'kill-message';
         killMessage.textContent = `${killerName} killed ${victimName}`;
-        killMessage.style.cssText = `
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
-      padding: 8px 12px;
-      margin-bottom: 5px;
-      border-radius: 4px;
-      font-size: 14px;
-      animation: slideIn 0.3s ease-out;
-    `;
+        killMessage.style.background = 'rgba(0, 0, 0, 0.7)';
+        killMessage.style.color = 'white';
+        killMessage.style.padding = '8px 12px';
+        killMessage.style.marginBottom = '5px';
+        killMessage.style.borderRadius = '4px';
+        killMessage.style.fontSize = '14px';
+        killMessage.style.animation = 'slideIn 0.3s ease-out';
 
-        killFeed.appendChild(killMessage);
-
-        // Limit to 5 messages
-        while (killFeed.children.length > 5) {
+        // Ensure only top 5 messages are shown
+        if (killFeed.children.length >= 5) {
             killFeed.removeChild(killFeed.firstChild);
         }
 
+        killFeed.appendChild(killMessage);
+
         // Remove after 5 seconds
         setTimeout(() => {
-            if (killFeed.contains(killMessage)) {
+            if (killMessage.parentNode === killFeed) {
                 killMessage.style.animation = 'slideOut 0.3s ease-out';
                 setTimeout(() => {
                     if (killFeed.contains(killMessage)) killMessage.remove();
+                }, 300);
+            }
+        }, 5000);
+    }
+
+    showJoinMessage(playerName) {
+        const killFeed = document.getElementById('kill-feed');
+        if (!killFeed) return;
+
+        const joinMessage = document.createElement('div');
+        joinMessage.className = 'kill-message';
+        joinMessage.style.background = 'rgba(0, 0, 0, 0.7)';
+        joinMessage.style.color = '#44ff44'; // Green for join
+        joinMessage.style.padding = '8px 12px';
+        joinMessage.style.marginBottom = '5px';
+        joinMessage.style.borderRadius = '4px';
+        joinMessage.style.fontSize = '14px';
+        joinMessage.style.fontWeight = 'bold';
+        joinMessage.style.animation = 'slideIn 0.3s ease-out';
+        joinMessage.textContent = `${playerName} joined the match`;
+
+        // Ensure only top 5 messages are shown
+        if (killFeed.children.length >= 5) {
+            killFeed.removeChild(killFeed.firstChild);
+        }
+
+        killFeed.appendChild(joinMessage);
+
+        // Remove after 5 seconds
+        setTimeout(() => {
+            if (joinMessage.parentNode === killFeed) {
+                joinMessage.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(() => {
+                    if (killFeed.contains(joinMessage)) joinMessage.remove();
                 }, 300);
             }
         }, 5000);

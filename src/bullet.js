@@ -14,10 +14,10 @@ export class Bullet {
         // Bullet casing (cylinder) - brass/brown color
         const casingGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.15, 8);
         const casingMaterial = new THREE.MeshStandardMaterial({
-            color: owner === 'player' ? 0xB87333 : 0x8B4513, // Copper/brass for player, darker brown for enemy
+            color: owner === 'player' ? 0xB87333 : (owner === 'remote' ? 0x008888 : 0x8B4513), // Cyan for remote
             metalness: 0.7,
             roughness: 0.3,
-            emissive: owner === 'player' ? 0x3d2817 : 0x2d1810,
+            emissive: owner === 'player' ? 0x3d2817 : (owner === 'remote' ? 0x004444 : 0x2d1810),
             emissiveIntensity: 0.2
         });
         const casing = new THREE.Mesh(casingGeometry, casingMaterial);
@@ -27,10 +27,10 @@ export class Bullet {
         // Bullet tip (cone) - darker metallic
         const tipGeometry = new THREE.ConeGeometry(0.05, 0.1, 8);
         const tipMaterial = new THREE.MeshStandardMaterial({
-            color: owner === 'player' ? 0x6B4423 : 0x4A2F1A, // Dark brown/bronze
+            color: owner === 'player' ? 0x6B4423 : (owner === 'remote' ? 0x00AAAA : 0x4A2F1A),
             metalness: 0.8,
             roughness: 0.2,
-            emissive: owner === 'player' ? 0x2d1810 : 0x1d0f08,
+            emissive: owner === 'player' ? 0x2d1810 : (owner === 'remote' ? 0x005555 : 0x1d0f08),
             emissiveIntensity: 0.15
         });
         const tip = new THREE.Mesh(tipGeometry, tipMaterial);
@@ -41,7 +41,7 @@ export class Bullet {
         // Add subtle glow trail for visibility
         const glowGeometry = new THREE.SphereGeometry(0.08, 8, 8);
         const glowMaterial = new THREE.MeshBasicMaterial({
-            color: owner === 'player' ? 0xFFAA33 : 0xFF4444,
+            color: owner === 'player' ? 0xFFAA33 : (owner === 'remote' ? 0x00FFFF : 0xFF4444),
             transparent: true,
             opacity: 0.3
         });

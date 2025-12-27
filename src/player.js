@@ -67,25 +67,36 @@ export class Player {
     initControls(domElement) {
         this.controls = new PointerLockControls(this.dummyCamera, domElement);
 
-        // SAFARI FIX: Boost sensitivity manually
-        if (this.isSafari) {
-            console.log('Safari detected: Applying sensitivity boost');
-            const sensitivityMultiplier = 5.0; // Boost factor
-            document.addEventListener('mousemove', (event) => {
-                // Only if pointer is locked
-                if (document.pointerLockElement === document.body) {
-                    const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
-                    const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
-
-                    // Apply extra rotation (PointerLockControls handles the base, we add more)
-                    this.dummyCamera.rotation.y -= movementX * 0.002 * sensitivityMultiplier;
-                    this.dummyCamera.rotation.x -= movementY * 0.002 * sensitivityMultiplier;
-
-                    // Clamp pitch
-                    this.dummyCamera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.dummyCamera.rotation.x));
+        // POINTER LOCK & TRACKPAD FIX: Use unadjustedMovement if available to bypass palm rejection
+        this.controls.lock = () => {
+            const options = { unadjustedMovement: true };
+            domElement.requestPointerLock(options).catch(e => {
+                if (e.name === 'NotSupportedError') {
+                    // Fallback for older browsers
+                    domElement.requestPointerLock();
                 }
             });
-        }
+        };
+
+        // Manual Rotation Handling (More responsive for trackpads)
+        document.addEventListener('mousemove', (event) => {
+            if (document.pointerLockElement === domElement && !this.isDead) {
+                // If not Safari (where we already have a specialized boost),
+                // we still want to ensure smooth movement.
+                // PointerLockControls usually handles this, but we can augment it
+                // if we find trackpads are being filtered.
+
+                if (this.isSafari) {
+                    const movementX = event.movementX || 0;
+                    const movementY = event.movementY || 0;
+                    const sensitivity = 0.01;
+
+                    this.dummyCamera.rotation.y -= movementX * 0.002 * 5.0;
+                    this.dummyCamera.rotation.x -= movementY * 0.002 * 5.0;
+                    this.dummyCamera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.dummyCamera.rotation.x));
+                }
+            }
+        });
 
         const onKeyDown = (event) => {
             switch (event.code) {

@@ -189,6 +189,19 @@ multiplayerManager.onKillConfirmed = (data) => {
     showMessage(`KILLED ${data.victimName}! +1`, 2000, '#00ff00', '24px');
 };
 
+multiplayerManager.onRemoteShot = (data) => {
+    // Other players see these tracers
+    const origin = new THREE.Vector3(data.origin.x, data.origin.y, data.origin.z);
+    const direction = new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z);
+    const bullet = new Bullet(scene, origin, direction, 'remote');
+    bullets.push(bullet);
+};
+
+multiplayerManager.onPlayerJoined = (data) => {
+    // Managers handles the kill feed message, but we can add sound or secondary log here
+    console.log(`Callback: ${data.name} joined the arena.`);
+};
+
 multiplayerManager.onDeathLimitReached = (data) => {
     console.log('Death limit reached:', data.deathCount);
     player.isDead = true;
@@ -214,7 +227,7 @@ multiplayerManager.onDeathLimitReached = (data) => {
     `;
 
     let rankingHTML = `
-        <h1 style="color: #ff4444; font-size: 64px; margin-bottom: 5px; text-shadow: 0 0 20px rgba(255,0,0,0.5);">YOU LOST</h1>
+        <h1 style="color: #ff4444; font-size: 64px; margin-bottom: 5px; text-shadow: 0 0 20px rgba(255,0,0,0.5);">Game Over</h1>
         <p style="font-size: 24px; color: #aaaaaa; margin-bottom: 20px;">You reached 10 deaths and are out of the match.</p>
         <div style="font-size: 32px; color: #ffd700; margin-bottom: 30px; font-weight: bold;">YOUR KILLS: ${kCount}</div>
         
@@ -977,6 +990,7 @@ btnMultiplayer.addEventListener('click', () => { if (playerName.length > 3) star
 window.addEventListener('playerDied', async (event) => {
     if (currentDifficulty === 'multiplayer') {
         console.log('Player died in multiplayer - letting server handle respawn/limit');
+        showMessage("YOU ARE DOWN! RESPAWNING...", 3000, "#ff4444", "40px");
         return;
     }
     console.log('=== PLAYER DIED EVENT HANDLER START ===');
