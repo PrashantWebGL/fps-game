@@ -327,12 +327,18 @@ export class Player {
         }
     }
 
-    takeDamage(amount, isHeadshot = false) {
+    takeDamage(amount, isHeadshot = false, shooterName = null) {
         this.health -= amount;
+
+        // Show damage feedback
+        if (shooterName) {
+            console.log(`Took ${amount} damage from ${shooterName}`);
+        }
+
         const healthFill = document.getElementById('health-fill');
         const healthValue = document.getElementById('health-value');
-        healthFill.style.width = `${(this.health / this.maxHealth) * 100}%`;
-        healthValue.innerText = Math.max(0, Math.round(this.health));
+        if (healthFill) healthFill.style.width = `${(this.health / this.maxHealth) * 100}%`;
+        if (healthValue) healthValue.innerText = Math.max(0, Math.round(this.health));
 
         if (this.health <= 0) {
             if (isHeadshot) {
@@ -388,5 +394,17 @@ export class Player {
 
     get position() {
         return this.dummyCamera.position;
+    }
+
+    get rotation() {
+        return this.dummyCamera.rotation;
+    }
+
+    getState() {
+        return {
+            position: { x: this.position.x, y: this.position.y, z: this.position.z },
+            rotation: { x: this.rotation.x, y: this.rotation.y, z: this.rotation.z },
+            health: this.health
+        };
     }
 }

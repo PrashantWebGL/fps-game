@@ -12,6 +12,7 @@ import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'; // Needed for cloning skinned meshes
 import { SoldierEnemy } from './SoldierEnemy.js';
+import { MultiplayerManager } from './MultiplayerManager.js';
 import { inject } from '@vercel/analytics';
 
 
@@ -159,30 +160,113 @@ const enemies = [];
 const particles = new Particles(scene);
 const soundManager = new SoundManager();
 
+// Score / HUD state
+let kCount = 0;
+let score = 0;
+let killCount = 0;
+const scoreEl = document.getElementById('score-value');
+const instructionsEl = document.getElementById('instructions');
+
+function updateHUD() {
+    if (scoreEl) {
+        scoreEl.innerText = kCount;
+    }
+}
+
 // Player
 const player = new Player(camera, scene, document.body, soundManager, isSafari); // Pass isSafari
 scene.add(player.hitbox); // Add hitbox to scene for debugging/logic
 player.dummyCamera.position.set(0, 2, 10); // Start position (Safe Zone)
 
-let lastTime = performance.now();
-let score = 0;
-let killCount = 0;
-let maxEnemies = 1;
-let gameStarted = false;
-// soldierModel defined at top
-// soldierAnimations defined at top
-const potions = [];
-let bossSpawned = false; // Track if boss is currently active
-let totalKills = 0; // Track total kills for boss spawn
-let killsSinceBoss = 0; // Track kills since last boss spawn
+// Multiplayer
+const multiplayerManager = new MultiplayerManager(scene, player);
+
+// Setup Multiplayer Callbacks
+multiplayerManager.onKillConfirmed = (data) => {
+    console.log('CLIENT: onKillConfirmed called with data:', data);
+    kCount = data.totalKills; // Sync with server value
+    updateHUD();
+    showMessage(`KILLED ${data.victimName}! +1`, 2000, '#00ff00', '24px');
+};
+
+multiplayerManager.onDeathLimitReached = (data) => {
+    console.log('Death limit reached:', data.deathCount);
+    player.isDead = true;
+    player.controls.unlock();
+
+    // Create Match Summary Overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'match-summary-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+        font-family: 'Inter', Arial, sans-serif;
+    `;
+
+    let rankingHTML = `
+        <h1 style="color: #ff4444; font-size: 64px; margin-bottom: 5px; text-shadow: 0 0 20px rgba(255,0,0,0.5);">YOU LOST</h1>
+        <p style="font-size: 24px; color: #aaaaaa; margin-bottom: 20px;">You reached 10 deaths and are out of the match.</p>
+        <div style="font-size: 32px; color: #ffd700; margin-bottom: 30px; font-weight: bold;">YOUR KILLS: ${kCount}</div>
+        
+        <div style="width: 80%; max-width: 600px; background: rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; border: 1px solid rgba(255,255,255,0.1);">
+            <h2 style="text-align: center; margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px; color: #00ffff;">MATCH RANKING</h2>
+            <table style="width: 100%; border-collapse: collapse; font-size: 18px;">
+                <thead>
+                    <tr style="text-align: left; color: #888;">
+                        <th style="padding: 10px;">PLAYER</th>
+                        <th style="padding: 10px;">KILLS</th>
+                        <th style="padding: 10px;">DEATHS</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    data.ranking.forEach((entry, index) => {
+        const isSelf = entry.name === playerName;
+        rankingHTML += `
+            <tr style="background: ${isSelf ? 'rgba(255, 255, 255, 0.15)' : 'transparent'}; border-bottom: 1px solid #333;">
+                <td style="padding: 12px; color: ${isSelf ? '#44ff44' : 'white'};">${index + 1}. ${entry.name} ${isSelf ? '(YOU)' : ''}</td>
+                <td style="padding: 12px;">${entry.kills}</td>
+                <td style="padding: 12px;">${entry.deaths}</td>
+            </tr>
+        `;
+    });
+
+    rankingHTML += `
+                </tbody>
+            </table>
+        </div>
+        
+        <p style="margin-top: 40px; font-size: 18px; color: #888;">Refresh the page to join a new match.</p>
+        <button onclick="window.location.reload()" style="margin-top: 20px; padding: 15px 40px; background: #44ff44; color: black; border: none; border-radius: 8px; font-size: 20px; cursor: pointer; font-weight: bold; transition: transform 0.2s;">REJOIN GAME</button>
+    `;
+
+    overlay.innerHTML = rankingHTML;
+    document.body.appendChild(overlay);
+};
 
 // Mobile auto-fire
 let mobileAutoFireTimer = 0;
 const mobileAutoFireInterval = 0.1; // 100ms = 0.1 seconds
 let isAimingAtEnemy = false;
 
-const scoreEl = document.getElementById('score-value');
-const instructionsEl = document.getElementById('instructions');
+let lastTime = performance.now();
+let maxEnemies = 1;
+let gameStarted = false;
+const potions = [];
+let bossSpawned = false; // Track if boss is currently active
+let totalKills = 0; // Track total kills for boss spawn
+let killsSinceBoss = 0; // Track kills since last boss spawn
 
 // Event Listeners
 window.addEventListener('resize', () => {
@@ -393,6 +477,11 @@ async function updateBannerContent(mesh) {
 }
 
 async function showLeaderboard(currentScore, viewOnly = false) {
+    if (currentDifficulty === 'multiplayer') {
+        console.log('Skipping global leaderboard in multiplayer mode');
+        return;
+    }
+
     // If not configued, show local warning
     let warningHTML = '';
     if (!isSupabaseConfigured()) {
@@ -559,7 +648,7 @@ function checkNameValidity(name) {
         document.getElementById('btn-easy'),
         document.getElementById('btn-medium'),
         document.getElementById('btn-hard'),
-        document.getElementById('btn-expert')
+        document.getElementById('btn-multiplayer')
     ];
     const btnLB = document.getElementById('btn-show-scores');
 
@@ -692,18 +781,35 @@ function startGame(difficulty) {
         case 'easy': maxEnemies = 1; break;
         case 'medium': maxEnemies = 2; break;
         case 'hard': maxEnemies = 4; break;
-        case 'expert':
-            maxEnemies = 1;
-            createSnow();
-            document.getElementById('expert-warning').style.display = 'block'; // Show warning
+        case 'multiplayer':
+            maxEnemies = 5; // We'll maintain a total of 5 entities (players + bots)
+            console.log(`Connecting to multiplayer as: ${playerName}`);
+            multiplayerManager.connect(playerName).then(spawnPos => {
+                if (spawnPos) {
+                    player.dummyCamera.position.set(spawnPos.x, 2, spawnPos.z);
+                    console.log('Spawned at initial position:', spawnPos);
+                }
+            }).catch(err => {
+                console.error('Failed to connect to multiplayer:', err);
+                alert('Multiplayer server unreachable. Running in offline mode.');
+            });
+            document.getElementById('player-count').style.display = 'block';
+            document.getElementById('multiplayer-info').style.display = 'block';
             break;
     }
-    if (difficulty !== 'expert') {
-        document.getElementById('expert-warning').style.display = 'none';
+    if (difficulty !== 'multiplayer') {
+        document.getElementById('multiplayer-info').style.display = 'none';
+        document.getElementById('player-count').style.display = 'none';
+        multiplayerManager.disconnect();
     }
     gameStarted = true;
     // Reset score saved flag for new game
     window.isScoreSavedForThisRun = false;
+
+    // Reset counts
+    kCount = 0;
+    score = 0;
+    if (scoreEl) scoreEl.innerText = '0';
 
     // Explicitly reset breathing sound
     soundManager.stopBreathing();
@@ -794,8 +900,8 @@ const nameInput = document.getElementById('player-name');
 const btnEasy = document.getElementById('btn-easy');
 const btnMedium = document.getElementById('btn-medium');
 const btnHard = document.getElementById('btn-hard');
-const btnExpert = document.getElementById('btn-expert');
-const buttons = [btnEasy, btnMedium, btnHard, btnExpert];
+const btnMultiplayer = document.getElementById('btn-multiplayer');
+const buttons = [btnEasy, btnMedium, btnHard, btnMultiplayer];
 const btnShowLeaderboard = document.getElementById('btn-show-leaderboard');
 
 // Create a safe close function for the leaderboard
@@ -865,10 +971,14 @@ nameInput.addEventListener('input', (e) => {
 btnEasy.addEventListener('click', () => { if (playerName.length > 3) startGame('easy'); });
 btnMedium.addEventListener('click', () => { if (playerName.length > 3) startGame('medium'); });
 btnHard.addEventListener('click', () => { if (playerName.length > 3) startGame('hard'); });
-btnExpert.addEventListener('click', () => { if (playerName.length > 3) startGame('expert'); });
+btnMultiplayer.addEventListener('click', () => { if (playerName.length > 3) startGame('multiplayer'); });
 
 // Handle player death
 window.addEventListener('playerDied', async (event) => {
+    if (currentDifficulty === 'multiplayer') {
+        console.log('Player died in multiplayer - letting server handle respawn/limit');
+        return;
+    }
     console.log('=== PLAYER DIED EVENT HANDLER START ===');
     console.log('Player died event triggered, score:', score);
     console.log('Browser info - iOS:', isIOS, 'Safari:', isSafari, 'Mobile:', isMobile);
@@ -1118,10 +1228,16 @@ function spawnBoss() {
 
 // Enemy Spawning
 setInterval(() => {
-    // Don't spawn normal enemies if boss is currently active
-    if (bossSpawned) return;
+    // Don't spawn normal enemies if boss is currently active or in multiplayer mode
+    if (bossSpawned || currentDifficulty === 'multiplayer') return;
 
-    if ((player.controls.isLocked || isMobile) && enemies.length < maxEnemies) {            // Try to find a valid spawn position not inside a tree and away from player
+    let targetEnemyCount = maxEnemies;
+    if (currentDifficulty === 'multiplayer') {
+        const onlineCount = multiplayerManager.playerCount;
+        targetEnemyCount = Math.max(0, 5 - onlineCount);
+    }
+
+    if ((player.controls.isLocked || isMobile || currentDifficulty === 'multiplayer') && enemies.length < targetEnemyCount) {            // Try to find a valid spawn position not inside a tree and away from player
         let spawnPos;
         let attempts = 0;
         const minDistFromPlayer = 5; // meters
@@ -1335,8 +1451,8 @@ function animate() {
                     if (dist < 1.5) { // Hit civilian
 
                         // Penalty
-                        score = Math.max(0, score - 30);
-                        updateHUD(); // Assuming updateHUD exists to refresh score display
+                        kCount = Math.max(0, kCount - 30);
+                        updateHUD();
                         showMessage("-30 (Civilian Casualty!)", 2000, "red", '24px'); // Added duration and size for consistency
 
                         // Remove civilian
@@ -1393,7 +1509,7 @@ function animate() {
                     }
                 }
             }
-            // 2. Bullet vs Player
+            // 2. Bullet vs Player (Local)
             else if (bullet.owner === 'enemy') {
                 const intersection = bullet.checkCollision(player.hitbox);
                 if (intersection) {
@@ -1407,6 +1523,27 @@ function animate() {
                 }
             }
 
+            // 3. Bullet vs Remote Players (Multiplayer)
+            if (currentDifficulty === 'multiplayer' && bullet.owner === 'player') {
+                const remotePlayersArr = multiplayerManager.getRemotePlayers();
+                for (const remote of remotePlayersArr) {
+                    // Only hit if they are visible (not dead)
+                    if (!remote.mesh.visible) continue;
+
+                    const intersection = bullet.checkCollision(remote.mesh);
+                    if (intersection) {
+                        if (!closestHit || intersection.distance < closestHit.distance) {
+                            closestHit = {
+                                type: 'remotePlayer',
+                                distance: intersection.distance,
+                                point: intersection.point,
+                                playerId: remote.data.id
+                            };
+                        }
+                    }
+                }
+            }
+
             // Apply hit to closest target
             if (closestHit) {
                 if (closestHit.type === 'wall') {
@@ -1415,12 +1552,9 @@ function animate() {
                 } else if (closestHit.type === 'banner') {
                     bullet.remove();
                     bullets.splice(i, 1);
-                    // Trigger interactive banner
                     updateBannerContent(closestHit.object);
                 } else if (closestHit.type === 'enemy') {
                     const enemy = closestHit.enemy;
-
-                    // Calculate damage before applying it
                     let multiplier = 1.0;
                     const partName = closestHit.partName;
                     if (partName === 'head') {
@@ -1432,90 +1566,80 @@ function animate() {
                     else multiplier = 0.68;
                     const finalDamage = 50 * multiplier;
 
-                    // Check if this hit will kill the enemy (BEFORE takeDamage is called)
                     const willDie = (enemy.health - finalDamage <= 0) && !enemy.isBroken;
                     const isBoss = enemy.isBoss;
                     const deathPosition = enemy.mesh.position.clone();
 
-                    // Now apply damage
                     enemy.takeDamage(50, bullet.velocity, partName);
                     particles.createBlood(bullet.position, bullet.velocity);
                     bullet.remove();
                     bullets.splice(i, 1);
 
-                    // If enemy just died, track the kill
                     if (willDie) {
-                        console.log(`Enemy killed! isBoss: ${isBoss}`);
-
-                        // Award points based on enemy type
                         if (isBoss) {
-                            score += 500; // Boss reward
+                            kCount += 500; // Use kCount in multiplayer if that's the HUD focus
+                            score += 500;
                             soundManager.playBossDown();
                             soundManager.stopBossAmbient();
-                            console.log('🎉 BIG BOSS DOWN! +500 points');
                             showMessage('💀 BIG BOSS DOWN! +500 💀', 3000, '#FF0000');
-
-                            // Spawn Red Potion
                             const redPotion = new RedPotion(scene, deathPosition, particles);
                             potions.push(redPotion);
-
                         } else {
-                            score += 100; // Normal enemy
+                            kCount += 100;
+                            score += 100;
                         }
-                        scoreEl.innerText = score;
-
-                        // Increment kill count
+                        updateHUD();
                         killCount++;
                         totalKills++;
-                        console.log(`✅ Total kills: ${totalKills}, Boss spawned: ${bossSpawned}`);
-
-                        // If boss was killed, resume normal enemy spawning
                         if (isBoss) {
                             bossSpawned = false;
                             killsSinceBoss = 0;
-                            console.log('🔓 Boss defeated! Normal enemies will resume spawning.');
                         } else {
                             killsSinceBoss++;
                         }
-
-                        // Check if we should spawn boss (every 3 normal enemy kills)
                         if (killsSinceBoss >= 10 && !bossSpawned) {
-                            console.log('🔥 TRIGGERING BOSS SPAWN!');
                             spawnBoss();
                         }
-
-                        // Spawn health potion every 6th kill
                         if (killCount % 6 === 0) {
                             const potion = new HealthPotion(scene, deathPosition, particles);
-                            potion.spawnTime = performance.now(); // Track spawn time
+                            potion.spawnTime = performance.now();
                             potions.push(potion);
                         }
                     }
+                } else if (closestHit.type === 'remotePlayer') {
+                    multiplayerManager.sendDamage(closestHit.playerId, 25);
+                    particles.createBlood(bullet.position, bullet.velocity);
+                    bullet.remove();
+                    bullets.splice(i, 1);
                 } else if (closestHit.type === 'player') {
-                    // Headshot detection: hits near camera height
                     const playerHeadHeight = player.dummyCamera.position.y;
                     const hitHeight = closestHit.point.y;
                     const isHeadshot = hitHeight > (playerHeadHeight - 0.4);
 
-                    player.takeDamage(10, isHeadshot); // Enemy damage: 10 shots to kill
+                    player.takeDamage(10, isHeadshot);
                     particles.createBlood(bullet.position, bullet.velocity);
                     bullet.remove();
                     bullets.splice(i, 1);
                 }
-                continue;
             }
         }
 
         // Update Enemies
         for (let i = enemies.length - 1; i >= 0; i--) {
-            enemies[i].update(delta, player.position, bullets, gameMap.walls);
+            const remotePlayers = currentDifficulty === 'multiplayer' ? multiplayerManager.getRemotePlayers() : [];
+            enemies[i].update(delta, player.position, bullets, gameMap.walls, remotePlayers);
 
             // Clean up enemies that have finished their death animation (isDead = true after 3 seconds)
             if (enemies[i].isDead) {
                 enemies[i].remove();
                 enemies.splice(i, 1);
-                // Note: Points already awarded when enemy was killed by bullet
             }
+        }
+
+        // Update Multiplayer
+        if (currentDifficulty === 'multiplayer') {
+            multiplayerManager.sendPosition(player.position, player.rotation);
+            multiplayerManager.update();
         }
 
         // Update Particles

@@ -1,19 +1,51 @@
-# How to Publish Your FPS Game
+# Deployment Guide: Epic Shooter 3D
 
-Your game has been built for production! The optimized files are located in the `dist` folder.
+Since this game uses a **Node.js/Socket.IO backend**, you cannot deploy the entire project to Vercel alone (Vercel is primarily for static sites and serverless functions). You need two separate deployments:
 
-## Option 1: Netlify (Easiest)
-1. Go to [Netlify Drop](https://app.netlify.com/drop).
-2. Drag and drop the `dist` folder from your project directory into the browser window.
-3. Your game will be live in seconds!
+## 1. Deploy the Backend (Multiplayer Server)
+We recommend using **Render.com** or **Railway.app** for the server.
 
-## Option 2: GitHub Pages
-1. Push your code to a GitHub repository.
-2. Go to Settings > Pages.
-3. Select "GitHub Actions" as the source.
-4. Use the "Static HTML" workflow.
+### Steps for Render.com:
+1. Create a new **Web Service** on Render.
+2. Connect your GitHub repository.
+3. Set the following configurations:
+   - **Environment**: `Node`
+   - **Build Command**: `npm install`
+   - **Start Command**: `node server.js`
+4. Render will provide you with a URL (e.g., `https://my-fps-server.onrender.com`).
 
-## Option 3: Vercel
-1. Install Vercel CLI: `npm i -g vercel`
-2. Run `vercel` in your project folder.
-3. Follow the prompts (keep defaults).
+> [!IMPORTANT]
+> Once you have the server URL, you **must** update the `serverUrl` in `src/MultiplayerManager.js`:
+> ```javascript
+> // Inside MultiplayerManager.js constructor:
+> this.serverUrl = 'https://my-fps-server.onrender.com';
+> ```
+
+---
+
+## 2. Deploy the Frontend (Game UI)
+You can use **Vercel** for the frontend.
+
+### Steps for Vercel:
+1. Go to [Vercel](https://vercel.com) and create a new project.
+2. Connect your GitHub repository.
+3. Vercel will auto-detect **Vite**.
+4. Set the **Build Command**: `npm run build`
+5. Set the **Output Directory**: `dist`
+6. Click **Deploy**.
+
+---
+
+## 3. Deployment Checklist
+- [ ] Ensure `server.js` uses `process.env.PORT || 3001`.
+- [ ] Update `src/MultiplayerManager.js` to point to your *live* backend URL.
+- [ ] In `server.js`, ensure CORS allows your Vercel frontend URL:
+  ```javascript
+  const io = new Server(httpServer, {
+      cors: {
+          origin: "https://your-game-url.vercel.app", // Use "*" for testing
+          methods: ["GET", "POST"]
+      }
+  });
+  ```
+- [ ] Push changes to GitHub; both services will auto-deploy.

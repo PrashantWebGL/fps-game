@@ -54,7 +54,7 @@ export class Enemy {
         this.debris = []; // For dismembered parts
     }
 
-    update(delta, playerPosition, bullets, walls) {
+    update(delta, playerPosition, bullets, walls, remotePlayers = []) {
         if (this.isDead) return;
 
         if (this.isBroken) {
@@ -67,30 +67,46 @@ export class Enemy {
             return;
         }
 
-        // Look at player
-        this.mesh.lookAt(playerPosition.x, 0, playerPosition.z);
+        // Find nearest target (Local Player or Remote Players)
+        let targets = [{ pos: playerPosition, isLocal: true }];
+        remotePlayers.forEach(p => {
+            if (p.mesh.visible) {
+                targets.push({ pos: p.mesh.position, isLocal: false, id: p.data.id });
+            }
+        });
 
-        // Move towards player if far away
-        const distance = this.mesh.position.distanceTo(playerPosition);
+        let closestTarget = targets[0];
+        let minDist = this.mesh.position.distanceTo(targets[0].pos);
+
+        for (let i = 1; i < targets.length; i++) {
+            let dist = this.mesh.position.distanceTo(targets[i].pos);
+            if (dist < minDist) {
+                minDist = dist;
+                closestTarget = targets[i];
+            }
+        }
+
+        const targetPos = closestTarget.pos;
+
+        // Look at nearest target
+        this.mesh.lookAt(targetPos.x, 0, targetPos.z);
+
+        // Move towards target if far away
+        const distance = minDist;
         let isMoving = false;
 
         if (distance > 10) {
-            const direction = new THREE.Vector3().subVectors(playerPosition, this.mesh.position).normalize();
+            const direction = new THREE.Vector3().subVectors(targetPos, this.mesh.position).normalize();
             direction.y = 0; // Keep on ground
 
-            // Candidate Position
+            // Move
             const moveVec = direction.multiplyScalar(this.speed * delta);
-            const candidatePos = this.mesh.position.clone().add(moveVec);
-
-            // Move (No Wall Collision as requested)
             this.mesh.position.add(moveVec);
             isMoving = true;
-
 
             // Footsteps
             this.distanceTraveled += this.speed * delta;
             if (this.distanceTraveled > this.stepInterval) {
-                // Volume based on distance to player
                 const vol = Math.max(0, 1 - distance / 30) * 0.5;
                 if (vol > 0.01) this.soundManager.playFootstep(vol);
                 this.distanceTraveled = 0;
@@ -99,64 +115,21 @@ export class Enemy {
 
         // Animation
         if (isMoving) {
-            this.walkCycle += delta * 10; // Speed of animation
-
-            // Swing Legs
+            this.walkCycle += delta * 10;
             this.leftLeg.rotation.x = Math.sin(this.walkCycle) * 0.5;
             this.rightLeg.rotation.x = Math.sin(this.walkCycle + Math.PI) * 0.5;
-
-            // Swing Arms
             this.leftArm.rotation.x = Math.sin(this.walkCycle + Math.PI) * 0.5;
             this.rightArm.rotation.x = Math.sin(this.walkCycle) * 0.5;
-            // Keep gun pointing somewhat forward even while swinging
-            // Recoil Logic: lerp recoilOffset back to 0
             this.recoilOffset = this.recoilOffset + (0 - this.recoilOffset) * (delta * 10);
-
-            // Apply base rotation + swing + recoil
-            // When stopped (else block), we set it to baseRightArmRotX (-PI/2).
-            // Here we are moving, but we want the gun to mostly point forward.
-            // Let's rely on the update loop for 'isMoving' to set legs/arms, but apply recoil on top.
-            // Actually, simplified: always point gun at player, but add recoil kick.
-
-            // BUT existing logic separates Moving vs Stopped arm rotation.
-            // Let's modify:
-            const swing = Math.sin(this.walkCycle) * 0.5;
-            this.rightArm.rotation.x = Math.max(swing, -0.2);
-            // The above line in original code forces arm forward-ish while running.
-            // Let's add recoil to it? 
-            // If running, they might not be aiming perfectly.
             this.rightArm.rotation.x -= this.recoilOffset;
-
         } else {
-            // Reset Pose
             this.leftLeg.rotation.x = 0;
             this.rightLeg.rotation.x = 0;
             this.leftArm.rotation.x = 0;
-            this.rightArm.rotation.x = this.baseRightArmRotX - this.recoilOffset; // Point gun at player when stopped + Recoil
+            this.rightArm.rotation.x = this.baseRightArmRotX - this.recoilOffset;
         }
 
-        // Jump & Dodge Logic
-        if (isMoving && !this.isBroken) {
-            // Random Jump
-            if (Math.random() < 0.005 && this.mesh.position.y <= 0.1) { // 0.5% chance per frame
-                this.velocity.y = 8; // Jump!
-            }
-
-            // Random Dodge (Strafe)
-            if (Math.random() < 0.01) { // 1% chance per frame
-                const strafeDir = new THREE.Vector3().crossVectors(
-                    new THREE.Vector3(0, 1, 0),
-                    new THREE.Vector3().subVectors(playerPosition, this.mesh.position).normalize()
-                ).normalize();
-
-                if (Math.random() < 0.5) strafeDir.negate();
-
-                this.velocity.x += strafeDir.x * 5; // Impulse
-                this.velocity.z += strafeDir.z * 5;
-            }
-        }
-
-        // Apply Physics (Gravity & Velocity)
+        // Physics
         this.velocity.y -= 9.8 * delta;
         this.mesh.position.y += this.velocity.y * delta;
         this.mesh.position.x += this.velocity.x * delta;
@@ -166,10 +139,6 @@ export class Enemy {
         this.velocity.x *= 0.9;
         this.velocity.z *= 0.9;
 
-        // Floor Collision
-        // The soldier model origin is at the feet (y=0), so checking < 0 is correct.
-        // However, if they are sinking, maybe the origin is slightly off or physics is pushing too hard.
-        // Let's ensure they stay strictly above 0.
         if (this.mesh.position.y < 0) {
             this.mesh.position.y = 0;
             this.velocity.y = 0;
@@ -178,15 +147,12 @@ export class Enemy {
         // Shoot logic
         this.shootTimer += delta;
 
-        // Simple Line of Sight check
+        // Line of Sight check
         let hasLineOfSight = true;
-        // ... (raycast logic if needed)
-
-        // Force update matrix world for accurate collision detection in this frame
         this.mesh.updateMatrixWorld(true);
 
-        const directionToPlayer = new THREE.Vector3().subVectors(playerPosition, this.mesh.position).normalize();
-        const raycaster = new THREE.Raycaster(new THREE.Vector3(this.mesh.position.x, 1.5, this.mesh.position.z), directionToPlayer, 0, distance);
+        const directionToTarget = new THREE.Vector3().subVectors(targetPos, this.mesh.position).normalize();
+        const raycaster = new THREE.Raycaster(new THREE.Vector3(this.mesh.position.x, 1.5, this.mesh.position.z), directionToTarget, 0, distance);
 
         if (walls) {
             const intersects = raycaster.intersectObjects(walls);
@@ -196,7 +162,7 @@ export class Enemy {
         }
 
         if (this.shootTimer >= this.shootInterval && distance < 20 && hasLineOfSight) {
-            this.shoot(bullets, playerPosition);
+            this.shoot(bullets, targetPos);
             this.shootTimer = 0;
         }
     }

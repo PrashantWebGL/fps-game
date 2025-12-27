@@ -19,9 +19,9 @@ export class HouseMap {
 
     static createBoundary(gameMap) {
         // Generate Forest Boundary
-        for (let i = 0; i < 50; i++) {
+        for (let i = 0; i < 48; i++) {
             const angle = (i / 50) * Math.PI * 2;
-            const radius = 45 + Math.random() * 5;
+            const radius = 45 + Math.random() * 10;
             const x = Math.cos(angle) * radius;
             const z = Math.sin(angle) * radius;
             gameMap.createTree(x, z);
