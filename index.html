@@ -528,6 +528,17 @@
     <h1 style="color: white; margin: 0 0 20px 0; font-size: 32px;">Epic Shooter 3D</h1>
     <img src="/assets/logo/1536*1024.png"
       style="max-width: 300px; margin-bottom: 20px; filter: drop-shadow(0 0 10px rgba(0,0,0,0.5));" alt="Logo">
+    
+    <!-- Google AdSense Banner Ad -->
+    <div id="modal-ad-container" style="margin: 20px 0; min-width: 320px; min-height: 100px; display: flex; justify-content: center; align-items: center;">
+      <ins class="adsbygoogle"
+           style="display:block"
+           data-ad-client="ca-pub-6711187069654589"
+           data-ad-slot="1234567890"
+           data-ad-format="horizontal"
+           data-full-width-responsive="true"></ins>
+    </div>
+
     <input type="text" id="player-name" placeholder="ENTER YOUR NAME" maxlength="20" style="
         padding: 15px; 
         font-size: 18px; 
@@ -573,6 +584,16 @@
     <!-- <p style="margin-top: 25px; font-size: 16px; color: rgba(255, 255, 255, 0.9);">WASD to Move | Click to Shoot</p> -->
   </div>
   <script type="module" src="/src/main.js"></script>
+  <script>
+    // Initialize AdSense ad in modal when page loads
+    window.addEventListener('load', function() {
+      try {
+        (adsbygoogle = window.adsbygoogle || []).push({});
+      } catch (e) {
+        console.log('AdSense initialization:', e);
+      }
+    });
+  </script>
 </body>
 
 </html>

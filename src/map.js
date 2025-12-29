@@ -105,7 +105,7 @@ export class GameMap {
         this.treePositions.push(new THREE.Vector3(x, 0, z)); // Track position
     }
 
-    createAdBanner(x, y, z, ry = 0) {
+    createAdBanner(x, y, z, ry = 0, useAd = true) {
         const group = new THREE.Group();
         group.position.set(x, y, z);
         group.rotation.y = ry;
@@ -117,27 +117,58 @@ export class GameMap {
         frame.castShadow = true;
         group.add(frame);
 
-        // Screen
+        // Load texture - try ad first, fallback to logo
         const textureLoader = new THREE.TextureLoader();
-        const screenTexture = textureLoader.load('/assets/logo/1536*1024.png');
-        // Check for special characters in path just in case, but standard load should work.
+        let bannerTexture;
+        let isAdTexture = false;
+
+        if (useAd) {
+            try {
+                bannerTexture = this.createAdSenseTexture();
+                if (bannerTexture) {
+                    isAdTexture = true;
+                } else {
+                    // AdSense not available, fallback to logo
+                    useAd = false;
+                }
+            } catch (e) {
+                console.warn('Failed to create ad texture, falling back to logo:', e);
+                useAd = false;
+            }
+        }
+
+        // Fallback to logo if ad not used or failed
+        if (!useAd || !bannerTexture) {
+            bannerTexture = textureLoader.load('/assets/logo/1536*1024.png');
+            isAdTexture = false;
+        }
 
         const screenGeo = new THREE.PlaneGeometry(7.6, 4.1);
         const screenMat = new THREE.MeshBasicMaterial({
-            map: screenTexture,
+            map: bannerTexture,
             color: 0xffffff,
             side: THREE.DoubleSide
         });
         const screen = new THREE.Mesh(screenGeo, screenMat);
         screen.position.z = 0.26; // Slightly in front of frame
-        screen.userData = { type: 'ad-banner', originalMap: screenTexture };
+        screen.userData = { 
+            type: 'ad-banner', 
+            originalMap: bannerTexture, 
+            isAdBanner: isAdTexture,
+            logoTexture: textureLoader.load('/assets/logo/1536*1024.png') // Pre-load logo for fallback
+        };
         group.add(screen);
 
-        // Back Screen
+        // Back Screen (share the same material for consistency)
         const backScreen = new THREE.Mesh(screenGeo, screenMat);
         backScreen.position.z = -0.26;
         backScreen.rotation.y = Math.PI;
-        backScreen.userData = { type: 'ad-banner', originalMap: screenTexture };
+        backScreen.userData = { 
+            type: 'ad-banner', 
+            originalMap: bannerTexture, 
+            isAdBanner: isAdTexture,
+            logoTexture: screen.userData.logoTexture
+        };
         group.add(backScreen);
 
         this.scene.add(group);
@@ -147,6 +178,62 @@ export class GameMap {
         this.walls.push(screen);
         this.walls.push(backScreen); // Enable hit detection on both sides
         this.walls.push(frame);
+    }
+
+    createAdSenseTexture() {
+        // Check if AdSense is available (adsbygoogle should exist if script loaded)
+        // If not available, return null to trigger logo fallback
+        if (typeof adsbygoogle === 'undefined' || !window.adsbygoogle) {
+            console.log('AdSense not available, will use logo fallback');
+            return null;
+        }
+
+        // Create canvas for AdSense-style ad
+        const canvas = document.createElement('canvas');
+        canvas.width = 1536;
+        canvas.height = 1024;
+        const ctx = canvas.getContext('2d');
+
+        // Background gradient (ad-like styling)
+        const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        gradient.addColorStop(0, '#1a1a2e');
+        gradient.addColorStop(0.5, '#16213e');
+        gradient.addColorStop(1, '#0f3460');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Border
+        ctx.strokeStyle = '#00ff00';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+
+        // Title text
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 120px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('ADVERTISEMENT', canvas.width / 2, 200);
+
+        // AdSense text
+        ctx.fillStyle = '#00ff88';
+        ctx.font = 'bold 80px Arial';
+        ctx.fillText('Google AdSense', canvas.width / 2, 350);
+
+        // Create iframe container for actual ad (hidden, used for rendering)
+        // Note: This creates a placeholder. For real ads, you'd need a server-side solution
+        // or use an ad network that provides image URLs
+        ctx.fillStyle = '#333333';
+        ctx.fillRect(canvas.width * 0.1, canvas.height * 0.4, canvas.width * 0.8, canvas.height * 0.4);
+
+        ctx.fillStyle = '#666666';
+        ctx.font = '60px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Ad Space', canvas.width / 2, canvas.height / 2);
+
+        // Create texture from canvas
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        return texture;
     }
 
     createCityBoundary(gridSize, height = 50, textureUrl = null) {
