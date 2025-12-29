@@ -13,6 +13,50 @@ export class GameMap {
         this.treePositions = []; // Track tree positions for spawns
         this.cars = []; // Track cars
         this.civilians = []; // Track civilians
+        this.adGames = []; // Cache for dynamic ads
+        this.adScreens = []; // Track screen meshes for dynamic updates
+        this.fetchGameMonetizeAds();
+        this.startAdCycle();
+    }
+
+    async fetchGameMonetizeAds() {
+        try {
+            const response = await fetch('https://gamemonetize.com/feed.php?format=0');
+            const data = await response.json();
+            if (Array.isArray(data) && data.length > 0) {
+                this.adGames = data;
+                console.log('GameMonetize ads loaded:', this.adGames.length);
+
+                // Immediately show ads on all registered screens once feed is loaded
+                this.updateAllAdBanners();
+            }
+        } catch (e) {
+            console.warn('Could not fetch dynamic GameMonetize ads:', e);
+            // Retry after 5 seconds if failed
+            setTimeout(() => this.fetchGameMonetizeAds(), 5000);
+        }
+    }
+
+    updateAllAdBanners() {
+        if (this.adGames.length === 0) return;
+
+        console.log(`Updating ${this.adScreens.length} ad banners with fresh content...`);
+        this.adScreens.forEach((screenPair, index) => {
+            // Stagger the loading slightly to avoid hitting the network all at once
+            setTimeout(() => {
+                this.loadRealTimeAd(screenPair.front, screenPair.back);
+            }, index * 200);
+        });
+    }
+
+    startAdCycle() {
+        // Refresh one random billboard every 60 seconds (more frequent)
+        setInterval(() => {
+            if (this.adGames.length > 0 && this.adScreens.length > 0) {
+                const screenPair = this.adScreens[Math.floor(Math.random() * this.adScreens.length)];
+                this.loadRealTimeAd(screenPair.front, screenPair.back);
+            }
+        }, 60000); // 1 minute
     }
 
     clear() {
@@ -125,11 +169,10 @@ export class GameMap {
         if (useAd) {
             try {
                 bannerTexture = this.createGameMonetizeTexture();
-                if (bannerTexture) {
-                    isAdTexture = true;
-                } else {
-                    useAd = false;
-                }
+                isAdTexture = true;
+
+                // Try to load a real dynamic ad if available
+                this.loadRealTimeAd(screen, backScreen);
             } catch (e) {
                 console.warn('Failed to create game texture:', e);
                 useAd = false;
@@ -173,6 +216,9 @@ export class GameMap {
         this.scene.add(group);
         this.mapObjects.push(group);
 
+        // Track for dynamic updates
+        this.adScreens.push({ front: screen, back: backScreen });
+
         // Add screens as walls/collidables
         this.walls.push(screen);
         this.walls.push(backScreen); // Enable hit detection on both sides
@@ -214,6 +260,66 @@ export class GameMap {
         // Create texture
         const texture = new THREE.CanvasTexture(canvas);
         return texture;
+    }
+
+    async loadRealTimeAd(screen, backScreen) {
+        // Don't overwrite if the billboard is currently showing the leaderboard
+        if (screen && screen.userData.isShowingLeaderboard) return;
+        if (backScreen && backScreen.userData.isShowingLeaderboard) return;
+
+        // Wait a bit to ensure ads have time to fetch
+        if (this.adGames.length === 0) {
+            let attempts = 0;
+            while (this.adGames.length === 0 && attempts < 10) {
+                await new Promise(r => setTimeout(r, 500));
+                attempts++;
+            }
+        }
+
+        if (this.adGames.length > 0) {
+            const randomGame = this.adGames[Math.floor(Math.random() * this.adGames.length)];
+
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 1024;
+                canvas.height = 512;
+                const ctx = canvas.getContext('2d');
+
+                // Draw thumbnail
+                ctx.drawImage(img, 0, 0, 1024, 512);
+
+                // Add dark overlay at bottom for text readability
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.fillRect(0, 400, 1024, 112);
+
+                // Add Game Title
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 36px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(randomGame.title.toUpperCase(), 512, 445);
+
+                // Add "PLAY NOW" label
+                ctx.fillStyle = '#22c55e'; // GameMonetize Green
+                ctx.font = 'bold 32px Arial';
+                ctx.fillText('🎮 PLAY NOW', 512, 485);
+
+                // Create and apply texture
+                const texture = new THREE.CanvasTexture(canvas);
+                screen.material.map = texture;
+                screen.material.needsUpdate = true;
+                if (backScreen) {
+                    backScreen.material.map = texture;
+                    backScreen.material.needsUpdate = true;
+                }
+                console.log('Real-time ad applied:', randomGame.title);
+            };
+            img.onerror = () => {
+                console.warn('Failed to load ad image:', randomGame.thumb);
+            };
+            img.src = randomGame.thumb;
+        }
     }
 
     createCityBoundary(gridSize, height = 50, textureUrl = null) {

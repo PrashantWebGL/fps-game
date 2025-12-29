@@ -501,10 +501,22 @@ async function updateBannerContent(mesh) {
 
     // Reset Timer (5 seconds)
     setTimeout(() => {
-        if (mesh.material.map === texture) { // Check if hasn't been updated again?
+        if (mesh.material.map === texture) {
             mesh.material.map = originalMap;
             mesh.material.needsUpdate = true;
             mesh.userData.isShowingLeaderboard = false;
+
+            // Trigger a fresh ad load for this specific banner immediately after the leaderboard closes
+            if (gameMap && gameMap.adGames.length > 0) {
+                // We need to know which screen we are on. 
+                // Since mesh is the screen, we can just call loadRealTimeAd if we have access to the screen pair.
+                // Or easier: find the pair in adScreens.
+                const screenPair = gameMap.adScreens.find(s => s.front === mesh || s.back === mesh);
+                if (screenPair) {
+                    gameMap.loadRealTimeAd(screenPair.front, screenPair.back);
+                }
+            }
+
             texture.dispose(); // Cleanup memory
         }
     }, 5000); // 5 seconds
