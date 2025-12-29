@@ -143,7 +143,8 @@ io.on('connection', (socket) => {
             // Check death limit
             if (targetPlayer.deathCount >= 10) {
                 // Get room ranking
-                const ranking = Array.from(rooms.get(targetPlayer.roomId) || [])
+                const roomId = targetPlayer.roomId;
+                const ranking = Array.from(rooms.get(roomId) || [])
                     .map(id => {
                         const p = players.get(id);
                         return { name: p.name, kills: p.kills, deaths: p.deathCount };
@@ -154,6 +155,14 @@ io.on('connection', (socket) => {
                     deathCount: targetPlayer.deathCount,
                     ranking: ranking
                 });
+
+                // REMOVE PLAYER FROM ROOM immediately so they disappear for others
+                if (rooms.has(roomId)) {
+                    rooms.get(roomId).delete(targetId);
+                    // Broadcast to others that this player is out
+                    io.to(roomId).emit('player-left', targetId);
+                    broadcastPlayerCount(roomId);
+                }
             } else {
                 // Respawn player after 3 seconds at a safe location
                 setTimeout(() => {

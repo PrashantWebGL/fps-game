@@ -259,13 +259,34 @@ multiplayerManager.onDeathLimitReached = (data) => {
                 </tbody>
             </table>
         </div>
+
+        <div id="match-summary-ad" style="margin: 20px 0; min-height: 100px; display: flex; justify-content: center;">
+            <ins class="adsbygoogle"
+                 style="display:block; min-width:320px;"
+                 data-ad-client="ca-pub-6711187069654589"
+                 data-ad-slot="1234567890"
+                 data-ad-format="horizontal"
+                 data-full-width-responsive="true"></ins>
+        </div>
         
-        <p style="margin-top: 40px; font-size: 18px; color: #888;">Refresh the page to join a new match.</p>
-        <button onclick="window.location.reload()" style="margin-top: 20px; padding: 15px 40px; background: #44ff44; color: black; border: none; border-radius: 8px; font-size: 20px; cursor: pointer; font-weight: bold; transition: transform 0.2s;">REJOIN GAME</button>
+        <p style="margin-top: 20px; font-size: 18px; color: #888;">Refresh the page to join a new match.</p>
+        <button onclick="window.location.reload()" style="margin-top: 10px; padding: 15px 40px; background: #44ff44; color: black; border: none; border-radius: 8px; font-size: 20px; cursor: pointer; font-weight: bold; transition: transform 0.2s;">REJOIN GAME</button>
     `;
 
     overlay.innerHTML = rankingHTML;
     document.body.appendChild(overlay);
+
+    // Hide player model
+    if (player.playerModel) player.playerModel.visible = false;
+
+    // Refresh ad
+    setTimeout(() => {
+        try {
+            (adsbygoogle = window.adsbygoogle || []).push({});
+        } catch (e) {
+            console.log('AdSense in match summary:', e);
+        }
+    }, 100);
 };
 
 // Mobile auto-fire
@@ -628,6 +649,15 @@ async function showLeaderboard(currentScore, viewOnly = false) {
                 </table>
             </div>
             
+            <div id="leaderboard-ad" style="margin: 15px 0; min-height: 100px; display: flex; justify-content: center;">
+                <ins class="adsbygoogle"
+                     style="display:block; min-width:320px;"
+                     data-ad-client="ca-pub-6711187069654589"
+                     data-ad-slot="1234567890"
+                     data-ad-format="horizontal"
+                     data-full-width-responsive="true"></ins>
+            </div>
+            
             <button onclick="${viewOnly ? 'window.closeLeaderboard()' : 'location.reload()'}" style="margin-top: 20px; padding: 15px 40px; font-size: 18px; font-weight: bold; cursor: pointer; background: #00ff00; color: black; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 255, 0, 0.3); transition: all 0.2s;">
                 ${viewOnly ? '✕ CLOSE' : '🔄 PLAY AGAIN'}
             </button>
@@ -950,6 +980,7 @@ if (btnShowLeaderboard) {
 
         const html = await showLeaderboard(score, true); // true = viewOnly
         lbOverlay.innerHTML = html;
+        refreshAds(); // Refresh ads after content is loaded
 
         // Ensure the close button in the HTML calls window.closeLeaderboard()
         if (mobileControlsTop) mobileControlsTop.style.display = 'none';
@@ -1071,6 +1102,9 @@ window.addEventListener('playerDied', async (event) => {
 
         console.log('Leaderboard HTML generated, length:', leaderboardHTML.length);
         instructions.innerHTML = leaderboardHTML;
+
+        refreshAds(); // Refresh ads after content is loaded
+
         console.log('Leaderboard displayed successfully');
     } catch (error) {
         console.error('Error loading leaderboard:', error);
@@ -1080,16 +1114,34 @@ window.addEventListener('playerDied', async (event) => {
                 <h1 style="color: white; margin: 0 0 20px 0;">GAME OVER</h1>
                 <p style="color: #ffd700; font-size: 32px; margin: 20px 0;">Score: ${score}</p>
                 <p style="color: #ff6b6b; margin: 20px 0;">Unable to load leaderboard</p>
+                <div id="gameover-ad-container" style="margin: 20px 0; width: 100%; display: flex; justify-content: center;">
+                    <ins class="adsbygoogle"
+                         style="display:inline-block;width:320px;height:100px"
+                         data-ad-client="ca-pub-6711187069654589"
+                         data-ad-slot="1234567890"></ins>
+                </div>
                 <button onclick="location.reload()" style="margin-top: 20px; padding: 15px 40px; font-size: 18px; font-weight: bold; cursor: pointer; background: #00ff00; color: black; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 255, 0, 0.3);">
                     🔄 PLAY AGAIN
                 </button>
             </div>
         `;
+        refreshAds(); // Refresh ads for the fallback UI as well
         console.log('Fallback UI displayed');
     }
 
     console.log('=== PLAYER DIED EVENT HANDLER END ===');
 });
+
+// Helper to refresh ads
+function refreshAds() {
+    if (window.adsbygoogle) {
+        try {
+            (adsbygoogle = window.adsbygoogle || []).push({});
+        } catch (e) {
+            console.warn('AdSense push failed:', e);
+        }
+    }
+}
 
 document.addEventListener('click', () => {
     if (player.isDead) {

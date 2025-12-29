@@ -124,15 +124,14 @@ export class GameMap {
 
         if (useAd) {
             try {
-                bannerTexture = this.createAdSenseTexture();
+                bannerTexture = this.createGameMonetizeTexture();
                 if (bannerTexture) {
                     isAdTexture = true;
                 } else {
-                    // AdSense not available, fallback to logo
                     useAd = false;
                 }
             } catch (e) {
-                console.warn('Failed to create ad texture, falling back to logo:', e);
+                console.warn('Failed to create game texture:', e);
                 useAd = false;
             }
         }
@@ -151,9 +150,9 @@ export class GameMap {
         });
         const screen = new THREE.Mesh(screenGeo, screenMat);
         screen.position.z = 0.26; // Slightly in front of frame
-        screen.userData = { 
-            type: 'ad-banner', 
-            originalMap: bannerTexture, 
+        screen.userData = {
+            type: 'ad-banner',
+            originalMap: bannerTexture,
             isAdBanner: isAdTexture,
             logoTexture: textureLoader.load('/assets/logo/1536*1024.png') // Pre-load logo for fallback
         };
@@ -163,9 +162,9 @@ export class GameMap {
         const backScreen = new THREE.Mesh(screenGeo, screenMat);
         backScreen.position.z = -0.26;
         backScreen.rotation.y = Math.PI;
-        backScreen.userData = { 
-            type: 'ad-banner', 
-            originalMap: bannerTexture, 
+        backScreen.userData = {
+            type: 'ad-banner',
+            originalMap: bannerTexture,
             isAdBanner: isAdTexture,
             logoTexture: screen.userData.logoTexture
         };
@@ -180,59 +179,40 @@ export class GameMap {
         this.walls.push(frame);
     }
 
-    createAdSenseTexture() {
-        // Check if AdSense is available (adsbygoogle should exist if script loaded)
-        // If not available, return null to trigger logo fallback
-        if (typeof adsbygoogle === 'undefined' || !window.adsbygoogle) {
-            console.log('AdSense not available, will use logo fallback');
-            return null;
-        }
-
-        // Create canvas for AdSense-style ad
+    createGameMonetizeTexture() {
+        // Create canvas for GameMonetize-style promo
         const canvas = document.createElement('canvas');
-        canvas.width = 1536;
-        canvas.height = 1024;
+        canvas.width = 1024;
+        canvas.height = 512;
         const ctx = canvas.getContext('2d');
 
-        // Background gradient (ad-like styling)
-        const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-        gradient.addColorStop(0, '#1a1a2e');
-        gradient.addColorStop(0.5, '#16213e');
-        gradient.addColorStop(1, '#0f3460');
-        ctx.fillStyle = gradient;
+        // Background (GameMonetize dark blue)
+        ctx.fillStyle = '#0f172a';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Border
-        ctx.strokeStyle = '#00ff00';
-        ctx.lineWidth = 8;
-        ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+        // Pattern
+        ctx.strokeStyle = '#22c55e'; // Green
+        ctx.lineWidth = 10;
+        ctx.strokeRect(20, 20, canvas.width - 40, canvas.height - 40);
 
-        // Title text
+        // Text
         ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 100px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('PLAY MORE', canvas.width / 2, canvas.height / 2 - 60);
+
+        ctx.fillStyle = '#22c55e';
         ctx.font = 'bold 120px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('ADVERTISEMENT', canvas.width / 2, 200);
+        ctx.fillText('GAMES', canvas.width / 2, canvas.height / 2 + 60);
 
-        // AdSense text
-        ctx.fillStyle = '#00ff88';
-        ctx.font = 'bold 80px Arial';
-        ctx.fillText('Google AdSense', canvas.width / 2, 350);
+        // GameMonetize reference
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '40px Arial';
+        ctx.fillText('gamemonetize.com', canvas.width / 2, canvas.height - 80);
 
-        // Create iframe container for actual ad (hidden, used for rendering)
-        // Note: This creates a placeholder. For real ads, you'd need a server-side solution
-        // or use an ad network that provides image URLs
-        ctx.fillStyle = '#333333';
-        ctx.fillRect(canvas.width * 0.1, canvas.height * 0.4, canvas.width * 0.8, canvas.height * 0.4);
-
-        ctx.fillStyle = '#666666';
-        ctx.font = '60px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Ad Space', canvas.width / 2, canvas.height / 2);
-
-        // Create texture from canvas
+        // Create texture
         const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
         return texture;
     }
 
