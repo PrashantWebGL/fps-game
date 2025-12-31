@@ -528,6 +528,15 @@ async function showLeaderboard(currentScore, viewOnly = false) {
         return;
     }
 
+    // Toggle Side Ads
+    const sideLeft = document.getElementById('leaderboard-side-left');
+    const sideRight = document.getElementById('leaderboard-side-right');
+    const startAd = document.getElementById('start-screen-side-ad');
+
+    if (sideLeft) sideLeft.style.display = 'flex';
+    if (sideRight) sideRight.style.display = 'flex';
+    if (startAd) startAd.style.display = 'none';
+
     // If not configued, show local warning
     let warningHTML = '';
     if (!isSupabaseConfigured()) {
@@ -545,21 +554,13 @@ async function showLeaderboard(currentScore, viewOnly = false) {
         newScoreId = result.id;
     }
 
-    // Get global rank logic
     let globalRank = '...';
-
-    // Check if player is present in current leaderboard page
     let foundInListIndex = -1;
     if (newScoreId) {
         foundInListIndex = leaderboard.findIndex(e => e.id === newScoreId);
     } else if (!viewOnly && !isSupabaseConfigured()) {
-        // Fallback for local storage without robust ID persistence in memory (though we added it)
         foundInListIndex = leaderboard.findIndex(e => e.score === currentScore && e.name === playerName);
     }
-
-    // Rank Sync Logic:
-    // 1. If we found the player in the list, their rank is index + 1
-    // 2. If not found (out of top 10), we fetch DB rank
 
     if (foundInListIndex !== -1) {
         globalRank = '#' + (foundInListIndex + 1);
@@ -568,7 +569,6 @@ async function showLeaderboard(currentScore, viewOnly = false) {
             globalRank = await getUserRank(currentScore, currentDifficulty);
             if (globalRank !== 'N/A') globalRank = '#' + globalRank;
         } else {
-            // Calculate local rank
             const localData = JSON.parse(localStorage.getItem('fpsLeaderboard') || '[]');
             const betterScores = localData.filter(e => e.difficulty === currentDifficulty && e.score > currentScore).length;
             globalRank = '#' + (betterScores + 1) + ' (Local)';
@@ -580,26 +580,22 @@ async function showLeaderboard(currentScore, viewOnly = false) {
     if (leaderboard.length === 0) {
         tableRows = `
             <tr>
-                <td colspan="4" style="color: white; font-size: 20px; padding: 30px; text-align: center;">
+                <td colspan="3" style="color: white; font-size: 20px; padding: 30px; text-align: center;">
                     No scores yet for ${currentDifficulty.toUpperCase()}! Be the first!
                 </td>
             </tr>
         `;
     } else {
         leaderboard.forEach((entry, index) => {
-            // Highlighting based on Unique ID
             let isCurrentPlayer = false;
-
             if (!viewOnly && newScoreId) {
                 isCurrentPlayer = entry.id === newScoreId;
             } else if (!viewOnly && !isSupabaseConfigured()) {
-                isCurrentPlayer = entry.id === newScoreId; // Local adds IDs now
+                isCurrentPlayer = entry.id === newScoreId;
             }
 
             const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
             const rank = medal || (index + 1);
-            const difficultyBadge = entry.difficulty === 'hard' ? '🔴' : entry.difficulty === 'medium' ? '🟡' : '🟢';
-            const difficultyText = (entry.difficulty || 'easy').toUpperCase();
 
             tableRows += `
                 <tr style="background: ${isCurrentPlayer ? '#ffd70044' : 'transparent'}; border-left: 4px solid ${isCurrentPlayer ? '#ffd700' : 'transparent'};">
@@ -609,9 +605,6 @@ async function showLeaderboard(currentScore, viewOnly = false) {
                     <td style="color: ${isCurrentPlayer ? '#ffd700' : 'white'}; font-size: 20px; padding: 10px; font-weight: ${isCurrentPlayer ? 'bold' : 'normal'};">
                         ${entry.name}
                     </td>
-                    <td style="color: white; font-size: 16px; padding: 10px; text-align: center;">
-                        ${difficultyBadge} ${difficultyText}
-                    </td>
                     <td style="color: #00ff88; font-size: 22px; padding: 10px; text-align: right; font-weight: bold;">
                         ${entry.score}
                     </td>
@@ -620,37 +613,47 @@ async function showLeaderboard(currentScore, viewOnly = false) {
         });
     }
 
-    // Rank Display Logic when viewing only vs dying
     const rankDisplay = viewOnly
-        ? `<p style="color: white; font-size: 16px; text-align: center;">Current Difficulty: <b style="color:#00ff88">${currentDifficulty.toUpperCase()}</b></p>`
+        ? `<p style="color: white; font-size: 16px; text-align: center;">Current Level: <b style="color:#00ff88">${currentDifficulty.toUpperCase()}</b></p>`
         : `<p style="color: white; font-size: 18px; text-align: center; margin: 5px 0 15px 0;">
                 Your Score: <span style="color: #ffd700; font-size: 26px; font-weight: bold;">${currentScore}</span>
                 <span style="color: #aaa; margin: 0 10px;">|</span>
                 Global Rank: <span style="color: #00ff88; font-size: 26px; font-weight: bold;">${globalRank}</span>
            </p>`;
 
+    // Add function to close sidebar ads when modal closes
+    window.closeLeaderboard = function () {
+        const overlay = document.getElementById('leaderboard-overlay');
+        if (overlay) overlay.style.display = 'none';
+        if (sideLeft) sideLeft.style.display = 'none';
+        if (sideRight) sideRight.style.display = 'none';
+        if (startAd) startAd.style.display = 'flex';
+
+        // Resume game if paused but not in start screen
+        if (gameStarted) {
+            window.isGamePaused = false;
+        }
+    };
+
     return `
-        <div style="background: #1a1a1aee; padding: 20px; border-radius: 20px; border: 3px solid #ffd700; width: 95%; max-width: 800px; max-height: 85vh; margin: 0 auto; display: flex; flex-direction: column;">
-            <h1 style="color: #ffd700; font-size: 28px; text-align: center; margin: 0 0 10px 0;">
+        <div style="background: #1a1a1aee; padding: 30px; border-radius: 20px; border: 3px solid #ffd700; width: 95%; max-width: 600px; max-height: 85vh; margin: 0 auto; display: flex; flex-direction: column; position: relative; z-index: 2010;">
+            <h1 style="color: #ffd700; font-size: 36px; text-align: center; margin: 0 0 15px 0; display: block !important; visibility: visible !important;">
                 🏆 LEADERBOARD 🏆
             </h1>
             ${warningHTML}
             ${rankDisplay}
             
-            <div style="background: #00000066; padding: 15px; border-radius: 12px; border: 2px solid #ffd70066; overflow-y: auto; flex: 1;">
+            <div style="background: #00000066; padding: 15px; border-radius: 12px; border: 2px solid #ffd70066; overflow-y: auto; flex: 1; margin-bottom: 20px;">
                 <table style="width: 100%; border-collapse: collapse; color: white;">
                     <thead style="position: sticky; top: 0; background: #000000cc; z-index: 10;">
                         <tr style="border-bottom: 2px solid #ffd700;">
-                            <th style="color: #ffd700; font-size: 14px; padding: 10px; text-align: center; text-transform: uppercase; letter-spacing: 1px;">
+                            <th style="color: #ffd700; font-size: 16px; padding: 12px; text-align: center; text-transform: uppercase; letter-spacing: 1px;">
                                 Rank
                             </th>
-                            <th style="color: #ffd700; font-size: 14px; padding: 10px; text-align: left; text-transform: uppercase; letter-spacing: 1px;">
+                            <th style="color: #ffd700; font-size: 16px; padding: 12px; text-align: left; text-transform: uppercase; letter-spacing: 1px;">
                                 Name
                             </th>
-                            <th style="color: #ffd700; font-size: 14px; padding: 10px; text-align: center; text-transform: uppercase; letter-spacing: 1px;">
-                                Level
-                            </th>
-                            <th style="color: #ffd700; font-size: 14px; padding: 10px; text-align: right; text-transform: uppercase; letter-spacing: 1px;">
+                            <th style="color: #ffd700; font-size: 16px; padding: 12px; text-align: right; text-transform: uppercase; letter-spacing: 1px;">
                                 Score
                             </th>
                         </tr>
@@ -661,21 +664,92 @@ async function showLeaderboard(currentScore, viewOnly = false) {
                 </table>
             </div>
             
-            <div id="leaderboard-ad" style="margin: 15px 0; min-height: 100px; display: flex; justify-content: center;">
-                <ins class="adsbygoogle"
-                     style="display:block; min-width:320px;"
-                     data-ad-client="ca-pub-6711187069654589"
-                     data-ad-slot="1234567890"
-                     data-ad-format="horizontal"
-                     data-full-width-responsive="true"></ins>
+            <div style="display: flex; gap: 15px; width: 100%; justify-content: center; flex-wrap: wrap; margin-top: 15px;">
+                <a href="https://buymeacoffee.com/epicshooter3d" target="_blank" style="padding: 15px 25px; font-size: 16px; font-weight: bold; text-decoration: none; background: #FFDD00; color: black; border-radius: 8px; box-shadow: 0 4px 10px rgba(255, 221, 0, 0.3); transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; flex: 1; min-width: 200px;">
+                    ☕ Buy Me a Coffee
+                </a>
+
+                <button onclick="${viewOnly ? 'window.closeLeaderboard()' : 'window.showInterstitialAndReload()'}" style="padding: 15px 25px; font-size: 16px; font-weight: bold; cursor: pointer; background: #00ff00; color: black; border: none; border-radius: 8px; box-shadow: 0 4px 15px rgba(0, 255, 0, 0.4); transition: all 0.2s; flex: 1; min-width: 200px;">
+                    ${viewOnly ? '✕ CLOSE' : '🔄 RESTART GAME'}
+                </button>
             </div>
-            
-            <button onclick="${viewOnly ? 'window.closeLeaderboard()' : 'location.reload()'}" style="margin-top: 20px; padding: 15px 40px; font-size: 18px; font-weight: bold; cursor: pointer; background: #00ff00; color: black; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 255, 0, 0.3); transition: all 0.2s;">
-                ${viewOnly ? '✕ CLOSE' : '🔄 PLAY AGAIN'}
-            </button>
         </div>
     `;
 }
+
+// Function to Show Interstitial Ad then Reload
+window.showInterstitialAndReload = function () {
+    // Set flag for post-reload ad trigger
+    localStorage.setItem('triggerAdOnLoad', 'true');
+    console.log("Ad flag set, reloading for start screen...");
+    window.location.reload();
+};
+
+// Check for post-reload ad trigger on startup
+window.addEventListener('load', () => {
+    if (localStorage.getItem('triggerAdOnLoad') === 'true') {
+        localStorage.removeItem('triggerAdOnLoad');
+        console.log("Start screen loaded, triggering ad...");
+
+        // Wait for SDK to be ready
+        const tryShowAd = () => {
+            if (typeof sdk !== 'undefined' && typeof sdk.showBanner !== 'undefined') {
+                sdk.showBanner();
+            } else if (typeof window.sdk !== 'undefined') {
+                window.sdk.showBanner();
+            } else {
+                // Retry for a few seconds if SDK not loaded yet
+                setTimeout(tryShowAd, 500);
+            }
+        };
+
+        // Short delay to ensure start screen UI is settled
+        setTimeout(tryShowAd, 1000);
+    }
+});
+
+// Global Reload Button Logic
+const globalReloadBtn = document.getElementById('btn-global-reload');
+if (globalReloadBtn) {
+    globalReloadBtn.addEventListener('click', () => {
+        if (confirm('Are you sure you want to reload the game?')) {
+            window.location.reload();
+        }
+    });
+}
+
+// Recover from ad-related stuck state if user returns to tab
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && window.reloadOnResume) {
+        console.log("Tab regained focus during ad process, forcing reload for consistency...");
+        // Wait a small delay to ensure SDK doesn't pick up first
+        setTimeout(() => {
+            window.location.reload();
+        }, 500);
+    }
+});
+
+// Reinforce SDK_OPTIONS events to handle our custom logic
+// (Doing this in main.js as well just in case)
+if (window.SDK_OPTIONS) {
+    const originalOnEvent = window.SDK_OPTIONS.onEvent;
+    window.SDK_OPTIONS.onEvent = function (a) {
+        if (originalOnEvent) originalOnEvent(a);
+
+        switch (a.name) {
+            case "SDK_GAME_START":
+                if (window.reloadOnResume) {
+                    console.log("Ad finished, reloading game...");
+                    window.location.reload();
+                }
+                break;
+            case "SDK_GAME_PAUSE":
+                window.isGamePaused = true;
+                break;
+        }
+    };
+}
+
 
 // Mobile detection
 const isMobile = /Mobi|Android/i.test(navigator.userAgent);
@@ -747,21 +821,39 @@ if (savedName) {
 
 const btnFullscreen = document.getElementById('btn-fullscreen');
 const btnPause = document.getElementById('btn-pause');
-const mobileControlsTop = document.getElementById('mobile-controls-top');
+const topLeftControls = document.getElementById('top-left-controls');
 
-// Enable controls for everyone (hidden initially)
-if (mobileControlsTop) mobileControlsTop.style.display = 'none';
+// Enable controls for everyone (reload visible, others hidden initially)
+if (topLeftControls) {
+    if (btnFullscreen) btnFullscreen.style.display = 'none';
+    if (btnPause) btnPause.style.display = 'none';
+}
 
 // Event Listeners for Buttons (Desktop & Mobile)
 if (btnFullscreen) {
     btnFullscreen.addEventListener('click', () => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => {
-                console.log(`Error attempting to enable fullscreen: ${err.message}`);
-            });
+        const docEl = document.documentElement;
+        const isFS = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+
+        if (!isFS) {
+            if (docEl.requestFullscreen) {
+                docEl.requestFullscreen();
+            } else if (docEl.webkitRequestFullscreen) { /* Safari */
+                docEl.webkitRequestFullscreen();
+            } else if (docEl.mozRequestFullScreen) { /* Firefox */
+                docEl.mozRequestFullScreen();
+            } else if (docEl.msRequestFullscreen) { /* IE/Edge */
+                docEl.msRequestFullscreen();
+            }
         } else {
             if (document.exitFullscreen) {
                 document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.mozCancelFullScreen) {
+                document.mozCancelFullScreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
             }
         }
     });
@@ -892,13 +984,16 @@ function startGame(difficulty) {
     instructionsEl.style.visibility = 'hidden';
     instructionsEl.style.opacity = '0';
 
+    // Hide any side ads
+    const startAd = document.getElementById('start-screen-side-ad');
+    if (startAd) startAd.style.display = 'none';
+
     // Update HUD Name
     document.getElementById('hud-player-name').textContent = playerName.toUpperCase();
 
-    // Show mobile controls on start (NOW FOR ALL PLATFORMS)
-    if (mobileControlsTop) {
-        mobileControlsTop.style.display = 'flex';
-    }
+    // Show fullscreen and pause buttons during active game
+    if (btnFullscreen) btnFullscreen.style.display = 'block';
+    if (btnPause) btnPause.style.display = 'block';
 }
 
 // Map Selection State
@@ -994,8 +1089,9 @@ if (btnShowLeaderboard) {
         lbOverlay.innerHTML = html;
         refreshAds(); // Refresh ads after content is loaded
 
-        // Ensure the close button in the HTML calls window.closeLeaderboard()
-        if (mobileControlsTop) mobileControlsTop.style.display = 'none';
+        // Hide game-specific buttons when viewing leaderboard
+        if (btnFullscreen) btnFullscreen.style.display = 'none';
+        if (btnPause) btnPause.style.display = 'none';
     });
 }
 
@@ -1086,11 +1182,9 @@ window.addEventListener('playerDied', async (event) => {
     instructions.style.zIndex = '10000';
     instructions.innerHTML = '<h1 style="color:white; text-align:center; margin-top: 200px;">LOADING SCORES...</h1>';
 
-    // Hide controls
-    if (mobileControlsTop) {
-        mobileControlsTop.style.display = 'none';
-        console.log('Mobile controls hidden');
-    }
+    // Hide game-specific buttons on death
+    if (btnFullscreen) btnFullscreen.style.display = 'none';
+    if (btnPause) btnPause.style.display = 'none';
 
     // Prevent duplicate score saves
     if (window.isScoreSavedForThisRun) {
@@ -1120,19 +1214,24 @@ window.addEventListener('playerDied', async (event) => {
         console.log('Leaderboard displayed successfully');
     } catch (error) {
         console.error('Error loading leaderboard:', error);
-        // Fallback UI if leaderboard fails - GUARANTEED to show
+        // Show Side Ads for fallback too
+        const sideLeft = document.getElementById('leaderboard-side-left');
+        const sideRight = document.getElementById('leaderboard-side-right');
+        if (sideLeft) sideLeft.style.display = 'flex';
+        if (sideRight) sideRight.style.display = 'flex';
+
         instructions.innerHTML = `
-            <div style="background: rgba(0,0,0,0.9); padding: 40px; border-radius: 20px; text-align: center;">
-                <h1 style="color: white; margin: 0 0 20px 0;">GAME OVER</h1>
+            <div style="background: rgba(0,0,0,0.9); padding: 40px; border-radius: 20px; text-align: center; border: 3px solid #ff4444;">
+                <h1 style="color: white; margin: 0 0 20px 0; display: block !important;">GAME OVER</h1>
                 <p style="color: #ffd700; font-size: 32px; margin: 20px 0;">Score: ${score}</p>
                 <p style="color: #ff6b6b; margin: 20px 0;">Unable to load leaderboard</p>
-                <div id="gameover-ad-container" style="margin: 20px 0; width: 100%; display: flex; justify-content: center;">
-                    <ins class="adsbygoogle"
-                         style="display:inline-block;width:320px;height:100px"
-                         data-ad-client="ca-pub-6711187069654589"
-                         data-ad-slot="1234567890"></ins>
-                </div>
-                <button onclick="location.reload()" style="margin-top: 20px; padding: 15px 40px; font-size: 18px; font-weight: bold; cursor: pointer; background: #00ff00; color: black; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 255, 0, 0.3);">
+
+                <a href="https://buymeacoffee.com/epicshooter3d" target="_blank" style="margin-top: 10px; padding: 12px 30px; font-size: 16px; font-weight: bold; text-decoration: none; background: #FFDD00; color: black; border-radius: 8px; box-shadow: 0 4px 10px rgba(255, 221, 0, 0.3); transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 10px;">
+                    ☕ Buy Me a Coffee
+                </a>
+                <br>
+
+                <button onclick="window.showInterstitialAndReload()" style="margin-top: 20px; padding: 15px 40px; font-size: 18px; font-weight: bold; cursor: pointer; background: #00ff00; color: black; border: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 255, 0, 0.3);">
                     🔄 PLAY AGAIN
                 </button>
             </div>
@@ -1155,10 +1254,52 @@ function refreshAds() {
     }
 }
 
+// Billboard Click Logic
+let billboardClickCount = 0;
+
 document.addEventListener('click', () => {
     if (player.isDead) {
         // Don't do anything when dead - leaderboard is showing
         return;
+    }
+
+    // Check for Billboard Click (Interaction)
+    if (gameStarted && !player.isDead) {
+        const raycaster = new THREE.Raycaster();
+        // in FPS pointer lock, center of screen is where we aim
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+        // gameMap.walls includes banners
+        const intersects = raycaster.intersectObjects(gameMap.walls);
+
+        if (intersects.length > 0) {
+            // Find first ad-banner
+            const hit = intersects.find(i => i.object.userData && i.object.userData.type === 'ad-banner');
+
+            if (hit && hit.distance < 20) { // Max click distance
+                console.log('Billboard clicked!');
+                billboardClickCount++;
+
+                // Visual feedback (optional: log count)
+                console.log(`Click count: ${billboardClickCount}`);
+
+                if (billboardClickCount % 3 === 0) {
+                    const url = hit.object.userData.adUrl;
+                    if (url) {
+                        console.log('Redirecting to ad:', url);
+                        // Open in new tab
+                        window.open(url, '_blank');
+
+                        // Pause game?
+                        if (player.controls.isLocked) document.exitPointerLock();
+                        window.isGamePaused = true;
+                        instructionsEl.style.display = 'block';
+                        instructionsEl.innerHTML = '<h1>PAUSED</h1><p>Ad Clicked. Click to Resume.</p>';
+                        return; // Skip shooting if we clicked an ad link
+                    }
+                }
+            }
+        }
     }
 
     if (gameStarted && !isMobile && !player.controls.isLocked) {
@@ -1168,7 +1309,9 @@ document.addEventListener('click', () => {
             console.warn('Pointer lock failed:', e);
         }
     } else if (gameStarted && !isMobile) {
-        player.shoot(bullets);
+        player.shoot(bullets, (origin, direction) => {
+            if (currentDifficulty === 'multiplayer') multiplayerManager.sendShot(origin, direction);
+        });
     }
     // On mobile, shooting is handled by touch controls or auto-fire
 });
@@ -1434,7 +1577,9 @@ function animate() {
 
         // Check for touch shooting
         if (player.touchControls.shouldShoot) {
-            player.shoot(bullets);
+            player.shoot(bullets, (origin, direction) => {
+                if (currentDifficulty === 'multiplayer') multiplayerManager.sendShot(origin, direction);
+            });
         }
 
         // Update Cars / Civilians
@@ -1757,7 +1902,9 @@ function animate() {
         if (isMobile && isAimingAtEnemy && !player.isDead) {
             mobileAutoFireTimer += delta;
             if (mobileAutoFireTimer >= mobileAutoFireInterval) {
-                player.shoot(bullets);
+                player.shoot(bullets, (origin, direction) => {
+                    if (currentDifficulty === 'multiplayer') multiplayerManager.sendShot(origin, direction);
+                });
                 mobileAutoFireTimer = 0;
             }
         } else {

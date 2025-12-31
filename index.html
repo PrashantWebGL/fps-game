@@ -5,9 +5,35 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="google-adsense-account" content="ca-pub-6711187069654589">
   <title>Epic Shooter 3D</title>
   <!-- Socket.IO Client -->
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <!-- GameMonetize SDK -->
+  <script type="text/javascript">
+    window.SDK_OPTIONS = {
+      gameId: "4f3d7d38d24b4740b74109403328d9c5",
+      onEvent: function (a) {
+        switch (a.name) {
+          case "SDK_GAME_PAUSE":
+            // pause game logic / mute audio
+            window.isGamePaused = true;
+            break;
+          case "SDK_GAME_START":
+            // advertisement done, resume game logic and unmute audio
+            window.isGamePaused = false;
+            break;
+          case "SDK_READY":
+            // when sdk is ready
+            break;
+        }
+      }
+    };
+    (function (a, b, c) {
+      var d = a.getElementsByTagName(b)[0];
+      a.getElementById(c) || (a = a.createElement(b), a.id = c, a.src = "https://api.gamemonetize.com/sdk.js", d.parentNode.insertBefore(a, d))
+    })(document, "script", "gamemonetize-sdk");
+  </script>
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6711187069654589"
     crossorigin="anonymous"></script>
   <style>
@@ -193,10 +219,9 @@
     }
 
     #instructions h1 {
-      display: none;
-      /* Hidden by default as user requested (only divisible when logo is NOT on screen) */
+      display: block;
       color: white;
-      margin: 0;
+      margin: 0 0 20px 0;
     }
 
     #instructions p {
@@ -351,6 +376,7 @@
         padding: 5px !important;
         top: 50%;
         transform: translate(-50%, -50%);
+        z-index: 1001;
       }
 
       #instructions h1 {
@@ -417,6 +443,41 @@
       z-index: 100;
       display: none;
     }
+
+    #btn-global-reload:hover,
+    #btn-fullscreen:hover,
+    #btn-pause:hover {
+      background: rgba(255, 255, 255, 0.2) !important;
+      border-color: rgba(255, 255, 255, 0.8) !important;
+      transform: scale(1.1);
+    }
+
+    .top-control-btn {
+      font-size: 24px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      color: white;
+      border-radius: 8px;
+      padding: 5px 12px;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    /* Mobile adjustments */
+    @media (max-width: 768px) {
+      .top-control-btn {
+        font-size: 28px;
+        padding: 8px 15px;
+        min-width: 50px;
+        min-height: 50px;
+      }
+    }
   </style>
 </head>
 
@@ -482,11 +543,11 @@
   <div id="player-count">Players Online: 0</div>
 
   <div id="crosshair"></div>
-  <div id="mobile-controls-top" style="display:none; position:absolute; top:10px; left:10px; z-index:1000; gap:10px;">
-    <button id="btn-fullscreen"
-      style="font-size:24px; background:rgba(0,0,0,0.5); border:1px solid white; color:white; border-radius:5px; padding:5px 10px;">⛶</button>
-    <button id="btn-pause"
-      style="font-size:24px; background:rgba(0,0,0,0.5); border:1px solid white; color:white; border-radius:5px; padding:5px 10px;">⏸️</button>
+  <div id="top-left-controls" style="position:absolute; top:10px; left:10px; z-index:10000; display:flex; gap:10px;">
+
+    <button id="btn-fullscreen" class="top-control-btn" style="display:none;">⛶</button>
+    <button id="btn-pause" class="top-control-btn" style="display:none;">⏸️</button>
+    <button id="btn-global-reload" class="top-control-btn" title="Reload Game">🔄</button>
   </div>
   <div id="mobile-start"
     style="display:none; position:absolute; inset:0; background:rgba(0,0,0,0.8); color:white; font-size:24px; font-weight:bold; justify-content:center; align-items:center; z-index:1000; cursor:pointer; user-select:none;">
@@ -528,16 +589,6 @@
     <h1 style="color: white; margin: 0 0 20px 0; font-size: 32px;">Epic Shooter 3D</h1>
     <img src="/assets/logo/1536*1024.png"
       style="max-width: 300px; margin-bottom: 20px; filter: drop-shadow(0 0 10px rgba(0,0,0,0.5));" alt="Logo">
-    
-    <!-- Google AdSense Banner Ad -->
-    <div id="modal-ad-container" style="margin: 20px 0; min-width: 320px; min-height: 100px; display: flex; justify-content: center; align-items: center;">
-      <ins class="adsbygoogle"
-           style="display:block"
-           data-ad-client="ca-pub-6711187069654589"
-           data-ad-slot="1234567890"
-           data-ad-format="horizontal"
-           data-full-width-responsive="true"></ins>
-    </div>
 
     <input type="text" id="player-name" placeholder="ENTER YOUR NAME" maxlength="20" style="
         padding: 15px; 
@@ -581,14 +632,54 @@
       style="display: none; color: #00ffff; margin-top: 15px; font-weight: bold; text-shadow: 0 0 10px rgba(0,255,255,0.5); font-size: 14px; max-width: 400px; line-height: 1.4;">
       🌐 Join other players online! Minimum 5 players (bots fill in).
     </div>
-    <!-- <p style="margin-top: 25px; font-size: 16px; color: rgba(255, 255, 255, 0.9);">WASD to Move | Click to Shoot</p> -->
   </div>
+
+  <!-- Start Screen Side Ad -->
+  <div id="start-screen-side-ad"
+    style="position: absolute; top: 50%; right: 5%; transform: translateY(-50%); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+    <div
+      style="color: white; margin-bottom: 5px; font-size: 12px; background: rgba(0,0,0,0.5); padding: 2px 5px; border-radius: 4px;">
+      ADVERTISEMENT</div>
+    <div style="min-width: 300px; min-height: 250px; background: rgba(0,0,0,0.2);">
+      <ins class="adsbygoogle" style="display:block; width: 300px; height: 250px;"
+        data-ad-client="ca-pub-6711187069654589" data-ad-slot="1234567890"></ins>
+    </div>
+  </div>
+
+  <!-- Leaderboard Side Ads -->
+  <div id="leaderboard-side-left"
+    style="display:none; position: absolute; top: 50%; left: 5%; transform: translateY(-50%); z-index: 2005; flex-direction: column; align-items: center; justify-content: center;">
+    <div
+      style="color: white; margin-bottom: 5px; font-size: 12px; background: rgba(0,0,0,0.5); padding: 2px 5px; border-radius: 4px;">
+      Sponsored</div>
+    <div style="min-width: 160px; min-height: 600px; background: rgba(0,0,0,0.2);">
+      <!-- Vertical Ad Slot -->
+      <ins class="adsbygoogle" style="display:block; width: 160px; height: 600px;"
+        data-ad-client="ca-pub-6711187069654589" data-ad-slot="1234567890"></ins>
+    </div>
+  </div>
+
+  <div id="leaderboard-side-right"
+    style="display:none; position: absolute; top: 50%; right: 5%; transform: translateY(-50%); z-index: 2005; flex-direction: column; align-items: center; justify-content: center;">
+    <div
+      style="color: white; margin-bottom: 5px; font-size: 12px; background: rgba(0,0,0,0.5); padding: 2px 5px; border-radius: 4px;">
+      Sponsored</div>
+    <div style="min-width: 160px; min-height: 600px; background: rgba(0,0,0,0.2);">
+      <!-- Vertical Ad Slot -->
+      <ins class="adsbygoogle" style="display:block; width: 160px; height: 600px;"
+        data-ad-client="ca-pub-6711187069654589" data-ad-slot="1234567890"></ins>
+    </div>
+  </div>
+
   <script type="module" src="/src/main.js"></script>
   <script>
-    // Initialize AdSense ad in modal when page loads
-    window.addEventListener('load', function() {
+    // Initialize AdSense
+    window.addEventListener('load', function () {
       try {
-        (adsbygoogle = window.adsbygoogle || []).push({});
+        var ads = document.querySelectorAll('.adsbygoogle');
+        ads.forEach(function (ad) {
+          (adsbygoogle = window.adsbygoogle || []).push({});
+        });
       } catch (e) {
         console.log('AdSense initialization:', e);
       }

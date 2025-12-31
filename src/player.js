@@ -34,7 +34,7 @@ export class Player {
 
         // Dummy Camera (for 3rd Person)
         this.dummyCamera = new THREE.Object3D();
-        this.dummyCamera.position.set(0, 2, 0);
+        this.dummyCamera.position.set(0, 2.1, 0); // Raised for "between eyebrows" feel
         this.dummyCamera.rotation.order = 'YXZ'; // Important for FPS controls
         this.scene.add(this.dummyCamera);
 
@@ -219,14 +219,16 @@ export class Player {
         // 1. Move X
         this.dummyCamera.position.x += this.velocity.x * delta;
         if (this.checkWallCollision(walls)) {
-            this.dummyCamera.position.x = oldPos.x;
+            // Tighten: push back a bit more to ensure we're out
+            this.dummyCamera.position.x = oldPos.x - (this.velocity.x * 0.1 * delta);
             this.velocity.x = 0;
         }
 
         // 2. Move Z
         this.dummyCamera.position.z += this.velocity.z * delta;
         if (this.checkWallCollision(walls)) {
-            this.dummyCamera.position.z = oldPos.z;
+            // Tighten: push back a bit more to ensure we're out
+            this.dummyCamera.position.z = oldPos.z - (this.velocity.z * 0.1 * delta);
             this.velocity.z = 0;
         }
 
@@ -248,10 +250,10 @@ export class Player {
             }
         }
 
-        // Floor collision (Global floor)
-        if (this.dummyCamera.position.y < 2) {
+        // Floor collision (Global floor) - Adjusted for new camera height
+        if (this.dummyCamera.position.y < 2.1) {
             this.velocity.y = 0;
-            this.dummyCamera.position.y = 2;
+            this.dummyCamera.position.y = 2.1;
             this.canJump = true;
             if (this.moveForward || this.moveBackward || this.moveLeft || this.moveRight) {
                 const speed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
@@ -296,9 +298,10 @@ export class Player {
         this.hitbox.position.y -= 1;
 
         const playerBox = new THREE.Box3().setFromObject(this.hitbox);
-        playerBox.expandByScalar(-0.1);
+        // Do NOT expand by scalar negative, keep it strict to prevent clipping
+        // playerBox.expandByScalar(-0.1); 
 
-        const feetY = this.dummyCamera.position.y - 2.0;
+        const feetY = this.dummyCamera.position.y - 2.1;
 
         for (const wall of walls) {
             const wallBox = new THREE.Box3().setFromObject(wall);
@@ -313,7 +316,7 @@ export class Player {
         return false;
     }
 
-    shoot(bullets) {
+    shoot(bullets, onBulletCreated = null) {
         if (this.isDead) return;
 
         if (this.isBurstMode) {
@@ -322,7 +325,7 @@ export class Player {
 
             let shotCount = 0;
             const burstInterval = setInterval(() => {
-                this.weapon.shoot(bullets, 'player');
+                this.weapon.shoot(bullets, 'player', onBulletCreated);
                 this.soundManager.playGunshot(false);
                 shotCount++;
 
@@ -333,7 +336,7 @@ export class Player {
             }, 100);
 
         } else {
-            this.weapon.shoot(bullets, 'player');
+            this.weapon.shoot(bullets, 'player', onBulletCreated);
             this.soundManager.playGunshot(false);
         }
     }

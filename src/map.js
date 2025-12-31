@@ -309,9 +309,15 @@ export class GameMap {
                 const texture = new THREE.CanvasTexture(canvas);
                 screen.material.map = texture;
                 screen.material.needsUpdate = true;
+
+                // Store URL for click redirection
+                screen.userData.adUrl = randomGame.url;
+
                 if (backScreen) {
                     backScreen.material.map = texture;
                     backScreen.material.needsUpdate = true;
+                    // Store URL for back screen too
+                    backScreen.userData.adUrl = randomGame.url;
                 }
                 console.log('Real-time ad applied:', randomGame.title);
             };

@@ -35,7 +35,7 @@ export class Weapon {
         this.recoilTimer = 0;
     }
 
-    shoot(bullets, owner) {
+    shoot(bullets, owner, onBulletCreated = null) {
         if (this.recoilTimer > 0) return;
 
         // 1. Find the target point (where the player is looking)
@@ -81,6 +81,11 @@ export class Weapon {
         // Create Bullet
         const bullet = new Bullet(this.scene, bulletPos, direction, owner);
         bullets.push(bullet);
+
+        // Sync with multiplayer if callback provided
+        if (onBulletCreated) {
+            onBulletCreated(bulletPos, direction);
+        }
 
         // Effects
         this.flashTimer = 0.05;

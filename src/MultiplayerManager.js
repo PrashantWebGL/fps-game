@@ -81,6 +81,11 @@ export class MultiplayerManager {
 
                     // Rotate the model container to match player rotation (Y-axis only)
                     remotePlayer.mesh.rotation.y = data.rotation.y;
+
+                    // Apply vertical rotation (pitch) to head if available
+                    if (remotePlayer.mesh.userData && remotePlayer.mesh.userData.parts && remotePlayer.mesh.userData.parts.head) {
+                        remotePlayer.mesh.userData.parts.head.rotation.x = data.rotation.x;
+                    }
                 }
             });
 
