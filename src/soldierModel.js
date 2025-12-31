@@ -161,11 +161,33 @@ export function createSoldierModel(color = 0x4a5a3a) {
     gunGroup.add(mag);
 
     // Position gun attached to right arm
-    gunGroup.position.set(0.2, -0.4, 0.4); // Relative to arm
+    // Arm is rotated -90 X (Pointing Forward).
+    // Y is Forward, Z is Up in this Arm space.
+    // Gun Cylinder is along Z. We want Gun Z (Barrel) to align with Arm Y (Forward).
+    // Rotate Gun X 90 degrees? Or -90?
+    // Let's position it at the hand first (y = -0.7).
+
+    gunGroup.position.set(0.1, -0.7, 0.05); // Near Hand
+
+    // Rotate so Gun Z aligns with Arm Y?
+    // Actually, simply rotating the gun group so it looks "forward" relative to the world
+    // Arm Y is World -Z.
+    // Gun Z is World Y (initially).
+    // We want Gun Z to be World -Z.
+    // Rotate X 90: Y->Z, Z->-Y.
+    // Rotate X -90: Y->-Z, Z->Y.
+    // Rotate so Gun Z aligns with Arm Y?
+    // User reported PI/2 points at head.
+    // User reported PI points at Sky.
+    // Adding another 90 degrees -> 1.5 * PI (Forward?)
+    gunGroup.rotation.x = Math.PI * 1.5;
+    gunGroup.rotation.z = Math.PI * 1.5 * 2;
+
     rightArm.add(gunGroup); // Attach to arm for movement
 
-    // Correct arm rotation for holding gun
-    rightArm.rotation.x = -Math.PI / 2; // Lift arm
+    // Correct arm rotation for holding gun pointing forward
+    rightArm.rotation.x = -Math.PI / 2;
+    rightArm.rotation.y = 0;
     rightArm.rotation.z = -0.1;
 
 

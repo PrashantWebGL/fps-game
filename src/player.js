@@ -34,7 +34,7 @@ export class Player {
 
         // Dummy Camera (for 3rd Person)
         this.dummyCamera = new THREE.Object3D();
-        this.dummyCamera.position.set(0, 2.1, 0); // Raised for "between eyebrows" feel
+        this.dummyCamera.position.set(0, 2.2, 0); // User requested 2.2 height
         this.dummyCamera.rotation.order = 'YXZ'; // Important for FPS controls
         this.scene.add(this.dummyCamera);
 
@@ -219,16 +219,14 @@ export class Player {
         // 1. Move X
         this.dummyCamera.position.x += this.velocity.x * delta;
         if (this.checkWallCollision(walls)) {
-            // Tighten: push back a bit more to ensure we're out
-            this.dummyCamera.position.x = oldPos.x - (this.velocity.x * 0.1 * delta);
+            this.dummyCamera.position.x = oldPos.x;
             this.velocity.x = 0;
         }
 
         // 2. Move Z
         this.dummyCamera.position.z += this.velocity.z * delta;
         if (this.checkWallCollision(walls)) {
-            // Tighten: push back a bit more to ensure we're out
-            this.dummyCamera.position.z = oldPos.z - (this.velocity.z * 0.1 * delta);
+            this.dummyCamera.position.z = oldPos.z;
             this.velocity.z = 0;
         }
 
@@ -238,22 +236,35 @@ export class Player {
         // Vertical Collision
         const hitWall = this.checkWallCollision(walls, true, true); // returnObject=true, isVertical=true
         if (hitWall) {
-            if (this.velocity.y < 0) {
-                const wallBox = new THREE.Box3().setFromObject(hitWall);
-                this.dummyCamera.position.y = wallBox.max.y + 2.0;
+            const wallBox = new THREE.Box3().setFromObject(hitWall);
+
+            // Fix: Only snap to top if we were ALREADY above the wall (hitting it from above)
+            // oldPos.y is the camera height. Feet is -2.2
+            // Use a tolerance of 0.5 units
+            const wasAbove = (oldPos.y - 2.2) >= (wallBox.max.y - 0.5);
+
+            if (this.velocity.y < 0 && wasAbove) {
+                // Land on top
+                this.dummyCamera.position.y = wallBox.max.y + 2.2; // 2.2 height
                 this.velocity.y = 0;
                 this.canJump = true;
                 if (this.velocity.y < -5) this.soundManager.playFootstep();
             } else {
+                // Hit side or bottom (Headbonk or side scrape)
+                // Undo Y movement only (slide down)
                 this.dummyCamera.position.y = oldPos.y;
-                this.velocity.y = 0;
+
+                // If moving up (headbonk), stop velocity
+                if (this.velocity.y > 0) {
+                    this.velocity.y = 0;
+                }
             }
         }
 
-        // Floor collision (Global floor) - Adjusted for new camera height
-        if (this.dummyCamera.position.y < 2.1) {
+        // Floor collision (Global floor) - Adjusted for new camera height 2.2
+        if (this.dummyCamera.position.y < 2.2) {
             this.velocity.y = 0;
-            this.dummyCamera.position.y = 2.1;
+            this.dummyCamera.position.y = 2.2;
             this.canJump = true;
             if (this.moveForward || this.moveBackward || this.moveLeft || this.moveRight) {
                 const speed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
@@ -272,7 +283,11 @@ export class Player {
         this.hitbox.position.y -= 1; // Center capsule
 
         // Update Player Model position
+        // Explicitly force update and log if needed (User reported sync issues)
         this.playerModel.position.copy(this.hitbox.position);
+
+        // Ensure the model is visible if in 3rd person (or debug)
+        this.playerModel.visible = this.isThirdPerson;
 
         // Update Real Camera Position
         if (this.isThirdPerson) {
@@ -298,14 +313,19 @@ export class Player {
         this.hitbox.position.y -= 1;
 
         const playerBox = new THREE.Box3().setFromObject(this.hitbox);
-        // Do NOT expand by scalar negative, keep it strict to prevent clipping
-        // playerBox.expandByScalar(-0.1); 
 
-        const feetY = this.dummyCamera.position.y - 2.1;
+        // Use a small buffer for horizontal checks to prevent shaking/oscillation
+        // but keep vertical checks strict.
+        if (!isVertical) {
+            playerBox.expandByScalar(-0.05);
+        }
+
+        const feetY = this.dummyCamera.position.y - 2.2;
 
         for (const wall of walls) {
             const wallBox = new THREE.Box3().setFromObject(wall);
-            if (!isVertical && feetY >= wallBox.max.y - 0.2) continue;
+            // Increased threshold to avoid toggling states at the very edge
+            if (!isVertical && feetY >= wallBox.max.y - 0.4) continue;
 
             if (playerBox.intersectsBox(wallBox)) {
                 if (returnObject) return wall;

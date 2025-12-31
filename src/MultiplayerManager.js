@@ -76,15 +76,17 @@ export class MultiplayerManager {
                     remotePlayer.data.position = data.position;
                     remotePlayer.data.rotation = data.rotation;
 
-                    // Update mesh position (grounded at y=0, assuming data.position is camera height y=2)
-                    remotePlayer.mesh.position.set(data.position.x, 0, data.position.z);
+                    // Update mesh position (grounded offset from camera height 2.2)
+                    // Received data.position is camera eye level. Mesh pivot is feet.
+                    // If grounded: y=2.2 -> mesh.y=0. Offset ~2.2.
+                    remotePlayer.mesh.position.set(data.position.x, data.position.y - 2.2, data.position.z);
 
-                    // Rotate the model container to match player rotation (Y-axis only)
-                    remotePlayer.mesh.rotation.y = data.rotation.y;
+                    // Rotate the model container (fix 180 degree rotation to see face)
+                    remotePlayer.mesh.rotation.y = data.rotation.y + Math.PI;
 
-                    // Apply vertical rotation (pitch) to head if available
+                    // Apply vertical rotation (pitch) to head (negate to fix inversion)
                     if (remotePlayer.mesh.userData && remotePlayer.mesh.userData.parts && remotePlayer.mesh.userData.parts.head) {
-                        remotePlayer.mesh.userData.parts.head.rotation.x = data.rotation.x;
+                        remotePlayer.mesh.userData.parts.head.rotation.x = -data.rotation.x;
                     }
                 }
             });

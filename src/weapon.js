@@ -6,29 +6,34 @@ export class Weapon {
         this.camera = camera;
         this.scene = scene;
 
-        // Simple Gun Model
+        // Container (this.mesh will be rotated to look at target)
         this.mesh = new THREE.Group();
+
+        // Inner group to orient the model correctly (Backwards Z -> Forward Z)
+        const modelGroup = new THREE.Group();
+        modelGroup.rotation.y = Math.PI * 2; // Flip 180 so -Z (Model Front) becomes +Z (LookAt Front)
+        this.mesh.add(modelGroup);
 
         const barrelGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.5);
         const barrelMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
         const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
         barrel.position.set(0, 0, 0);
+        modelGroup.add(barrel);
 
         const handleGeometry = new THREE.BoxGeometry(0.1, 0.2, 0.1);
         const handle = new THREE.Mesh(handleGeometry, barrelMaterial);
         handle.position.set(0, -0.1, 0.1);
         handle.rotation.x = Math.PI / 4;
-
-        this.mesh.add(barrel);
-        this.mesh.add(handle);
+        modelGroup.add(handle);
 
         // Attach to camera
         this.camera.add(this.mesh);
-        this.mesh.position.set(0.3, -0.3, -0.5);
+        // Positioned for height 2.2 visibility
+        this.mesh.position.set(0.35, -0.25, -0.4);
 
-        // Muzzle Flash Light
-        this.flashLight = new THREE.PointLight(0xffaa00, 0, 5);
-        this.flashLight.position.set(0, 0, -0.6);
+        // Muzzle Flash Light (Placed in parent mesh, +Z is forward now)
+        this.flashLight = new THREE.PointLight(0xff0000, 0, 5);
+        this.flashLight.position.set(0, 0, 0.6); // Forward is +Z
         this.mesh.add(this.flashLight);
 
         this.flashTimer = 0;
@@ -94,6 +99,47 @@ export class Weapon {
     }
 
     update(delta) {
+        // Dynamic Aiming: Rotate gun towards the target
+        // 1. Get the current target point (similar to shoot logic but for every frame)
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+        // Intersect with scene for visual feedback (ignoring player/gun ideally)
+        const intersects = raycaster.intersectObjects(this.scene.children, true);
+
+        let targetPoint = null;
+        for (let i = 0; i < intersects.length; i++) {
+            // Avoid hitting player capsule/gun AND avoid aiming too close (ground at feet)
+            if (intersects[i].distance > 5) {
+                targetPoint = intersects[i].point;
+                break;
+            }
+        }
+
+        if (!targetPoint) {
+            // Default point far away
+            const forward = new THREE.Vector3();
+            this.camera.getWorldDirection(forward);
+            targetPoint = this.camera.position.clone().add(forward.multiplyScalar(100));
+        }
+
+        // 2. Calculate local rotation for the gun to point at target
+        // The gun is a child of the camera.
+        // We need the target point in the camera's local space? Or just LookAt in world space?
+        // Since the gun is attached to the camera, using a simple world LookAt might fight the camera's rotation.
+        // Easier: Calculate the vector from Gun World Pos to Target World Pos.
+
+        const gunWorldPos = new THREE.Vector3();
+        this.mesh.getWorldPosition(gunWorldPos);
+
+        // We want the gun to look at 'targetPoint'. 
+        this.mesh.lookAt(targetPoint);
+
+        // Adjustment: The gun model might be built along Z or X, so we might need to offset the rotation.
+        // Our gun is built: barrel on ... well, let's revert to the simple lookAt first.
+        // However, 'lookAt' works in world space. Since mesh is child of camera, loopAt will update local rotation to satisfy world constraint.
+        // EXCEPT: This might result in the gun jittering if the camera moves fast.
+        // A smoother approach: Slerp the rotation.
+
         // Muzzle Flash
         if (this.flashTimer > 0) {
             this.flashLight.intensity = 2;
@@ -103,12 +149,12 @@ export class Weapon {
         }
 
         // Recoil Recovery
+        const originalZ = -0.4; // Updated from constructor
         if (this.recoilTimer > 0) {
             this.recoilTimer -= delta;
-            // Return to original position smoothly
-            this.mesh.position.z = THREE.MathUtils.lerp(this.mesh.position.z, -0.5, delta * 10);
+            this.mesh.position.z = THREE.MathUtils.lerp(this.mesh.position.z, originalZ, delta * 10);
         } else {
-            this.mesh.position.z = -0.5;
+            this.mesh.position.z = originalZ;
         }
     }
 }

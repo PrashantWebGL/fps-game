@@ -17,10 +17,11 @@ export class BossEnemy extends Enemy {
         this.scene.remove(this.mesh);
 
         // Create bigger, scarier boss model
-        this.mesh = createSoldierModel(0x8B00BB); // Dark red
+        this.mesh = createSoldierModel(0x8B00BB); // Dark purple/maroon
 
-        // Make boss 2x larger
-        this.mesh.scale.set(2, 2, 2);
+        // Make boss thinner and taller (scary/disturbed look)
+        this.mesh.scale.set(1, 1.2, 1);
+        this.speed = 2; // Faster
 
         // Position boss
         const angle = Math.random() * Math.PI * 2;
@@ -32,6 +33,11 @@ export class BossEnemy extends Enemy {
         );
 
         this.scene.add(this.mesh);
+
+        // Make head specifically smaller
+        if (this.mesh.userData.parts && this.mesh.userData.parts.head) {
+            this.mesh.userData.parts.head.scale.set(0.5, 0.5, 0.5);
+        }
 
         // Update parts references for the new mesh
         const parts = this.mesh.userData.parts;
@@ -104,6 +110,12 @@ export class BossEnemy extends Enemy {
             const scale = 1 + Math.sin(this.auraPulse) * 0.1;
             this.aura.scale.set(scale, scale, scale);
             this.aura.material.opacity = 0.1 + Math.sin(this.auraPulse) * 0.05;
+
+            // Erratic/Scary movement: more intense jitter
+            if (this.torso) {
+                this.torso.rotation.x = Math.sin(this.auraPulse * 15) * 0.1;
+                this.torso.rotation.z = Math.cos(this.auraPulse * 12) * 0.1;
+            }
         }
 
         // Pulsing eyes
